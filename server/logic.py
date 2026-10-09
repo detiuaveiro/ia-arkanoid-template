@@ -36,7 +36,7 @@ class Brick:
         self.health = health
         self.max_health = health
         self.indestructible = indestructible
-        self.points = points
+        self.points = 0 if indestructible else points  # never breaks, so never scores (whatever the config says)
         self.active = True
         self._dict_cache: dict[str, Any] | None = None
 
@@ -137,7 +137,7 @@ class Brick:
 
 
 class Arkanoid:
-    """Arkanoid simulation environment with Earth gravity and 3-region paddle physics."""
+    """Arkanoid simulation environment: constant-speed ball (no gravity) and 3-region paddle physics."""
 
     def __init__(
         self,
