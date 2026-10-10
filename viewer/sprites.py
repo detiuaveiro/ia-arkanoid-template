@@ -12,13 +12,13 @@ NORD_SNOW_DARK = (216, 222, 233)  # nord4 (Metal shadow / highlights)
 NORD_SNOW_BRIGHT = (236, 239, 244)  # nord6 (Paddle highlight / ball)
 
 NORD_FROST_TEAL = (143, 188, 187)  # nord7 (Teal highlight)
-NORD_FROST_ICE = (136, 192, 208)  # nord8 (1 hit left base)
+NORD_FROST_ICE = (136, 192, 208)  # nord8 (blue bricks: 2 hits left)
 NORD_FROST_DEEP = (94, 129, 172)  # nord10 (Shadow)
 
-NORD_AURORA_RED = (191, 97, 106)  # nord11 (5+ hits)
-NORD_AURORA_ORANGE = (208, 135, 112)  # nord12 (4 hits)
-NORD_AURORA_YELLOW = (235, 203, 139)  # nord13 (3 hits)
-NORD_AURORA_GREEN = (163, 190, 140)  # nord14 (2 hits)
+NORD_AURORA_RED = (191, 97, 106)  # nord11 (red bricks: 1 hit left)
+NORD_AURORA_ORANGE = (208, 135, 112)  # nord12 (orange, no standard brick type)
+NORD_AURORA_YELLOW = (235, 203, 139)  # nord13 (yellow bricks: 4 hits left)
+NORD_AURORA_GREEN = (163, 190, 140)  # nord14 (green bricks: 3 hits left)
 
 
 def _mix(c1: tuple[int, int, int], c2: tuple[int, int, int], t: float) -> tuple[int, int, int]:
@@ -127,7 +127,7 @@ def generate_default_spritesheet(path: str = "assets/sprites.png") -> None:
     # Spritesheet canvas: 256x256 with alpha channel
     sheet = pygame.Surface((256, 256), pygame.SRCALPHA)
 
-    # Bricks (50x20), by hits remaining: frost=1, green=2, yellow=3, orange=4, red=5+, metal=indestructible
+    # Bricks (50x20): frost blue, green, yellow, orange, red and metal (indestructible)
     brick_definitions = [
         (0, NORD_FROST_ICE, False),
         (24, NORD_AURORA_GREEN, False),
@@ -167,7 +167,8 @@ class SpriteManager:
             "aurora_orange": self._subsurface(0, 72, 50, 20),
             "aurora_red": self._subsurface(0, 96, 50, 20),
             "metal": self._subsurface(0, 120, 50, 20),
-            # Backwards compatibility and palette aliases
+            # Brick types the server sends (config.json): the color tells the hits left (red 1, blue 2, green 3,
+            # yellow 4); the names above are older aliases...
             "blue": self._subsurface(0, 0, 50, 20),  # frost
             "green": self._subsurface(0, 24, 50, 20),  # aurora_green
             "yellow": self._subsurface(0, 48, 50, 20),  # aurora_yellow

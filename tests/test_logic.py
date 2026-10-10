@@ -111,7 +111,7 @@ class TestLogic(unittest.TestCase):
         self.assertGreaterEqual(self.game.ball_y, self.game.ceiling_y)
 
     def test_nord_brick_color_and_hits_remaining(self) -> None:
-        # Brick with 3 health starts in Aurora
+        # Brick with 3 health starts green (Aurora)
         b = Brick(
             index=0,
             x=10,
@@ -124,29 +124,34 @@ class TestLogic(unittest.TestCase):
         )
         self.assertEqual(b.hits_remaining, 3)
         self.assertEqual(b.palette, "aurora")
-        self.assertEqual(b.dynamic_type, "aurora_yellow")
-        self.assertEqual(b.color, "#EBCB8B")
+        self.assertEqual(b.dynamic_type, "green")
+        self.assertEqual(b.color, "#a3be8c")
 
-        # After 1st hit -> 2 hits left (Aurora Green)
+        # After 1st hit -> 2 hits left: blue (Frost)
         b.hit()
         self.assertEqual(b.hits_remaining, 2)
-        self.assertEqual(b.palette, "aurora")
-        self.assertEqual(b.dynamic_type, "aurora_green")
-        self.assertEqual(b.color, "#A3BE8C")
+        self.assertEqual(b.palette, "frost")
+        self.assertEqual(b.dynamic_type, "blue")
+        self.assertEqual(b.color, "#81a1c1")
 
-        # After 2nd hit -> 1 hit left (Frost Ice Blue)
+        # After 2nd hit -> 1 hit left: red (Aurora)
         b.hit()
         self.assertEqual(b.hits_remaining, 1)
-        self.assertEqual(b.palette, "frost")
-        self.assertEqual(b.dynamic_type, "frost")
-        self.assertEqual(b.color, "#88C0D0")
+        self.assertEqual(b.palette, "aurora")
+        self.assertEqual(b.dynamic_type, "red")
+        self.assertEqual(b.color, "#bf616a")
 
         # Verify to_dict shares this in world state
         d = b.to_dict()
         self.assertEqual(d["hits_remaining"], 1)
-        self.assertEqual(d["palette"], "frost")
-        self.assertEqual(d["type"], "frost")
-        self.assertEqual(d["color"], "#88C0D0")
+        self.assertEqual(d["palette"], "aurora")
+        self.assertEqual(d["type"], "red")
+        self.assertEqual(d["color"], "#bf616a")
+
+        # No type needs 5 hits: shown as the toughest type below (yellow, 4 hits)
+        tough = Brick(index=2, x=130, y=100, width=50, height=20, brick_type="yellow", health=5)
+        self.assertEqual(tough.dynamic_type, "yellow")
+        self.assertEqual(tough.color, "#ebcb8b")
 
         # Metal brick in Snow Storm
         metal = Brick(
@@ -162,7 +167,20 @@ class TestLogic(unittest.TestCase):
         self.assertEqual(metal.hits_remaining, -1)
         self.assertEqual(metal.palette, "snow_storm")
         self.assertEqual(metal.dynamic_type, "metal")
-        self.assertEqual(metal.color, "#D8DEE9")
+        self.assertEqual(metal.color, "#d8dee9")
+
+    def test_brick_type_and_color_follow_config(self) -> None:
+        # A brick reports its configured type and color (red 1 hit, blue 2, green 3, yellow 4), as in config.json
+        types = self.game.config.bricks.types
+        for brick in self.game.bricks:
+            d = brick.to_dict()
+            self.assertEqual(d["type"], brick.brick_type)
+            self.assertEqual(d["color"], types[brick.brick_type].color)
+        # Once damaged, it shows the type that needs the hits it has left
+        green = next(b for b in self.game.bricks if b.brick_type == "green")
+        green.hit()
+        self.assertEqual(green.to_dict()["type"], "blue")
+        self.assertEqual(green.to_dict()["color"], types["blue"].color)
 
     def test_paddle_3_regions_bounce(self) -> None:
         w = self.game.paddle_width
@@ -312,7 +330,7 @@ class TestLogic(unittest.TestCase):
         self.assertTrue(self.game.bricks[0].active)
         self.assertEqual(self.game.bricks[0].health, 1)
         self.assertEqual(self.game.bricks[0].hits_remaining, 1)
-        self.assertEqual(self.game.bricks[0].palette, "frost")
+        self.assertEqual(self.game.bricks[0].dynamic_type, "red")
         # Ball should now be moving downwards (reflected)
         self.assertGreater(self.game.ball_vy, 0.0)
 

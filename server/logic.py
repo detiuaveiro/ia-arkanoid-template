@@ -11,6 +11,25 @@ import numpy as np
 from server.config import AppConfig, load_config, load_map_file
 from server.highscores import HighScoreManager
 
+# Type and color shown for each number of hits left (-1 = indestructible), as in config.json: a brick looks like the
+# type that needs that many hits (red 1, blue 2, green 3, yellow 4), so its color tells how many hits are left.
+DEFAULT_BRICK_STYLES: dict[int, tuple[str, str]] = {
+    -1: ("metal", "#d8dee9"),
+    1: ("red", "#bf616a"),
+    2: ("blue", "#81a1c1"),
+    3: ("green", "#a3be8c"),
+    4: ("yellow", "#ebcb8b"),
+}
+
+# Nord palette group of each Nord color.
+# We can refer to: (https://www.nordtheme.com/docs/colors-and-palettes).
+NORD_GROUPS: dict[str, str] = {
+    **dict.fromkeys(("#2e3440", "#3b4252", "#434c5e", "#4c566a"), "polar_night"),
+    **dict.fromkeys(("#d8dee9", "#e5e9f0", "#eceff4"), "snow_storm"),
+    **dict.fromkeys(("#8fbcbb", "#88c0d0", "#81a1c1", "#5e81ac"), "frost"),
+    **dict.fromkeys(("#bf616a", "#d08770", "#ebcb8b", "#a3be8c", "#b48ead"), "aurora"),
+}
+
 
 class Brick:
     """Represents a single brick in the Arkanoid arena."""
@@ -26,7 +45,9 @@ class Brick:
         health: int = 1,
         indestructible: bool = False,
         points: int = 50,
+        styles: dict[int, tuple[str, str]] | None = None,
     ) -> None:
+        self.styles = DEFAULT_BRICK_STYLES if styles is None else styles  # hits left -> (type, color)
         self.index = index
         self.x = x
         self.y = y
@@ -63,42 +84,26 @@ class Brick:
 
     @property
     def palette(self) -> str:
-        """Nord color palette group for current state."""
-        if self.indestructible:
-            return "snow_storm"
-        if self.health <= 1:
-            return "frost"
-        return "aurora"
+        """Nord color palette group of the current color ("custom" for a color outside the Nord palette)."""
+        return NORD_GROUPS.get(self.color.lower(), "custom")
 
     @property
     def dynamic_type(self) -> str:
-        """Current dynamic brick type reflecting hits remaining."""
-        if self.indestructible:
-            return "metal"
-        if self.health <= 1:
-            return "frost"
-        if self.health == 2:
-            return "aurora_green"
-        if self.health == 3:
-            return "aurora_yellow"
-        if self.health == 4:
-            return "aurora_orange"
-        return "aurora_red"
+        """Brick type matching the hits remaining (the type that needs that many hits), "metal" if indestructible."""
+        return self._style()[0]
 
     @property
     def color(self) -> str:
-        """Current Nord hex color reflecting hits remaining."""
-        if self.indestructible:
-            return "#D8DEE9"  # nord4 (Snow Storm)
-        if self.health <= 1:
-            return "#88C0D0"  # nord8 (Frost Ice Blue - 1 hit left)
-        if self.health == 2:
-            return "#A3BE8C"  # nord14 (Aurora Green - 2 hits)
-        if self.health == 3:
-            return "#EBCB8B"  # nord13 (Aurora Yellow - 3 hits)
-        if self.health == 4:
-            return "#D08770"  # nord12 (Aurora Orange - 4 hits)
-        return "#BF616A"  # nord11 (Aurora Red - 5+ hits)
+        """Hex color of the current dynamic type, so the color tells how many hits are left."""
+        return self._style()[1]
+
+    def _style(self) -> tuple[str, str]:
+        """(type, color) for the hits remaining; a count that no type needs (e.g. 5+) uses the toughest type below."""
+        hits = -1 if self.indestructible else max(1, self.health)
+        if hits in self.styles:
+            return self.styles[hits]
+        below = [h for h in self.styles if 0 < h < hits]
+        return self.styles[max(below)] if below else (self.brick_type, "#ffffff")
 
     def hit(self) -> bool:
         """Register a hit on this brick. Returns True if the brick was destroyed."""
@@ -300,6 +305,7 @@ class Arkanoid:
         data = []
         b_width = self.config.bricks.width
         b_height = self.config.bricks.height
+        styles = {t.health: (name, t.color) for name, t in self.config.bricks.types.items()}
 
         for idx, b_info in enumerate(brick_list):
             b_type = str(b_info.get("type", "red"))
@@ -328,6 +334,7 @@ class Arkanoid:
                 health=health,
                 indestructible=indestructible,
                 points=points,
+                styles=styles,
             )
             self.bricks.append(brick)
             data.append(
