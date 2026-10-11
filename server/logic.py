@@ -91,7 +91,7 @@ class Brick:
         if self.indestructible:
             return "#D8DEE9"  # nord4 (Snow Storm)
         if self.health <= 1:
-            return "#BF616A"  # nord8 (Frost Ice Blue - 1 hit left)
+            return "#BF616A"  # nord8 (Aurora Red - 1 hit left)
         if self.health == 2:
             return "#A3BE8C"  # nord14 (Aurora Green - 2 hits)
         if self.health == 3:
