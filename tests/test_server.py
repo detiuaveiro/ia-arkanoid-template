@@ -131,6 +131,11 @@ class TestServerOptions(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             ArkanoidGameServer(level_time_limit=-1)
 
+    def test_unloadable_level_map_is_a_start_up_error(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            ArkanoidGameServer(levels=["missing_level.json"])
+        self.assertIn("missing_level.json", str(ctx.exception))
+
     def test_parser_defaults(self) -> None:
         args = build_parser().parse_args([])
         self.assertEqual((args.fps, args.acceleration, args.levels, args.share_highscore), (30, 1.0, None, False))
