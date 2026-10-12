@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import logging
+import math
 import threading
 from typing import Any
 
@@ -149,9 +150,14 @@ class ArkanoidViewer:
         badge_text = self.font.render(f"STAGE {stage:02d}", True, (136, 192, 208))
         surface.blit(badge_text, (20, 8))
 
-        mins = int(timer // 60)
-        secs = int(timer % 60)
-        time_text = self.font.render(f"TIME: {mins:02d}:{secs:02d}", True, (216, 222, 233))
+        limit = float(state.get("level_time_limit", 0.0))
+        if limit > 0.0:  # the level deadline: count down to it (resets with every level)
+            left = max(0.0, limit - float(state.get("level_time_elapsed", 0.0)))
+            shown, label = math.ceil(left), "TIME LEFT"
+            time_color = (191, 97, 106) if left <= 30.0 else (216, 222, 233)  # Nord red for the last 30 s
+        else:  # no deadline configured: elapsed game time
+            shown, label, time_color = int(timer), "TIME", (216, 222, 233)
+        time_text = self.font.render(f"{label}: {shown // 60:02d}:{shown % 60:02d}", True, time_color)
         time_rect = time_text.get_rect(center=(self.width // 2, 16))
         surface.blit(time_text, time_rect)
 
