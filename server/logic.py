@@ -177,6 +177,8 @@ class Arkanoid:
         self.score = 0
         self.elapsed_time: float = 0.0
         self.level_elapsed: float = 0.0
+        self._level_start_score = 0  # score when the current level was loaded
+        self.level_norms: list[float] = []  # points/sec of every level cleared so far (an uncleared level earns none)
         self.timed_out = False
         self.high_score = self.high_score_manager.get_highest_score()
         self.high_score_normalized = (
@@ -209,11 +211,32 @@ class Arkanoid:
         self.reset_game()
 
     @property
+    def level_score(self) -> int:
+        """Points scored in the current level."""
+        return self.score - self._level_start_score
+
+    @property
     def normalized_score(self) -> float:
-        """Current score normalized by elapsed simulation seconds (points/sec)."""
-        if self.elapsed_time > 0.0:
-            return round(self.score / self.elapsed_time, 2)
+        """Per-level metric: points per second of the current level (its clock restarts at every level).
+
+        It is 0 when the game ended on this level without clearing it: only cleared levels earn a normalized score.
+        """
+        if self.game_over and not self.game_won:
+            return 0.0
+        if self.level_elapsed > 0.0:
+            return round(self.level_score / self.level_elapsed, 2)
         return 0.0
+
+    @property
+    def avg_norm_score(self) -> float:
+        """Grading metric: mean over all the levels of the sequence of their normalized score.
+
+        A level that is not cleared (the game ended on it) or never reached counts 0, so the value only grows
+        when a level is cleared and does not depend on how long the levels before it took.
+        """
+        if not self.level_sequence:
+            return 0.0
+        return round(sum(self.level_norms) / len(self.level_sequence), 2)
 
     def reset_game(self) -> None:
         """Reset the full game session back to level 1."""
@@ -221,6 +244,8 @@ class Arkanoid:
         self.score = 0
         self.elapsed_time = 0.0
         self.level_elapsed = 0.0
+        self._level_start_score = 0
+        self.level_norms = []
         self.timed_out = False
         self.game_over = False
         self.game_won = False
@@ -244,7 +269,7 @@ class Arkanoid:
             player=self.player_name,
             agent_id=self.agent_id or "",
             time_elapsed=self.elapsed_time,
-            normalized_score=self.normalized_score,
+            avg_norm_score=self.avg_norm_score,
         )
         self.high_score = self.high_score_manager.get_highest_score()
         self.high_score_normalized = (
@@ -257,7 +282,8 @@ class Arkanoid:
                     "id": self.agent_id,
                     "name": self.player_name,
                     "score": self.score,
-                    "normalized_score": self.normalized_score,
+                    "avg_norm_score": self.avg_norm_score,
+                    "levels_cleared": len(self.level_norms),
                     "time_elapsed": self.elapsed_time,
                     "level": self._level_number(),
                     "won": self.game_won,
@@ -279,6 +305,7 @@ class Arkanoid:
             return
 
         self.level_elapsed = 0.0
+        self._level_start_score = self.score
         map_filename = self.level_sequence[level_idx]
         map_path = os.path.join(self.config.game.maps_dir, map_filename)
         if not os.path.exists(map_path):
@@ -604,6 +631,8 @@ class Arkanoid:
             if self.score > self.high_score:
                 self.high_score = self.score
 
+            if self.level_elapsed > 0.0:  # close the level: its own points / its own time
+                self.level_norms.append(self.level_score / self.level_elapsed)
             self.level_idx += 1
             if self.level_idx < len(self.level_sequence):
                 self.load_level(self.level_idx)
@@ -633,8 +662,8 @@ class Arkanoid:
         self.level_elapsed += dt
         if self.score > self.high_score:
             self.high_score = self.score
-        if self.normalized_score > self.high_score_normalized:
-            self.high_score_normalized = self.normalized_score
+        if self.avg_norm_score > self.high_score_normalized:
+            self.high_score_normalized = self.avg_norm_score
 
         if len(self._last_query_id) != len(self.bricks):
             self.build_spatial_grid()
@@ -772,6 +801,7 @@ class Arkanoid:
             "lives": self.lives,
             "score": self.score,
             "normalized_score": self.normalized_score,
+            "avg_norm_score": self.avg_norm_score,
             "timer": round(self.elapsed_time, 2),
             "time_elapsed": round(self.elapsed_time, 2),
             "high_score": self.high_score,

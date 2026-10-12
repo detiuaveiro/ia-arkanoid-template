@@ -134,6 +134,7 @@ class ArkanoidViewer:
         high_score = state.get("high_score", 0)
         timer = float(state.get("timer", state.get("time_elapsed", 0.0)))
         norm_score = float(state.get("normalized_score", 0.0))
+        avg_norm = float(state.get("avg_norm_score", 0.0))
         high_score_norm = float(state.get("high_score_normalized", 0.0))
         stage = state.get("stage", state.get("level", 1))
         stage_name = state.get("stage_name", state.get("level_name", f"Stage {stage}"))
@@ -168,12 +169,12 @@ class ArkanoidViewer:
 
         # === ROW 3: Score & High Score (Raw and Normalized rate) ===
         score_text = self.font.render(
-            f"SCORE: {score:05d} ({norm_score:.1f}/s)", True, (236, 239, 244)
+            f"SCORE: {score:05d} ({norm_score:.1f}/s)  AVG: {avg_norm:.1f}", True, (236, 239, 244)
         )
         surface.blit(score_text, (20, 58))
 
         high_text = self.font.render(
-            f"HIGH: {high_score:05d} ({high_score_norm:.1f}/s)", True, (129, 161, 193)
+            f"HIGH: {high_score:05d} (AVG {high_score_norm:.1f})", True, (129, 161, 193)
         )
         high_rect = high_text.get_rect(topright=(self.width - 20, 58))
         surface.blit(high_text, high_rect)
