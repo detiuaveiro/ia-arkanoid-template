@@ -452,6 +452,18 @@ class TestLogic(unittest.TestCase):
         self.assertAlmostEqual(game.avg_norm_score, 3.33)  # only level 1 counts: (10 + 0 + 0) / 3
         self.assertEqual(game.score, 500)  # the raw score keeps everything, it sorts the ranking
 
+    def test_levels_label_compresses_runs(self) -> None:
+        game = self.game
+        for files, label in (
+            (["level1.json", "level2.json", "level3.json"], "1-3"),
+            (["level2.json"], "2"),
+            (["level1.json", "level3.json"], "1,3"),
+            (["level1.json", "level2.json", "level4.json"], "1-2,4"),
+            (["custom.json"], "custom.json"),
+        ):
+            game.level_sequence = files
+            self.assertEqual(game.levels_label(), label)
+
     def test_never_clearing_agent_has_zero_avg_norm_score(self) -> None:
         game = self.game
         game.reset_game()

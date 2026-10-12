@@ -72,6 +72,8 @@ class TestRemoteSubmitter(unittest.TestCase):
                 "score": 1000,
                 "avg_norm_score": 20.0,
                 "levels_cleared": 1,
+                "levels_played": 1,
+                "setting": "1",
                 "time_elapsed": 50.0,
                 "level": 1,
                 "won": False,

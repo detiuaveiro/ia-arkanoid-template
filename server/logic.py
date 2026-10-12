@@ -284,6 +284,8 @@ class Arkanoid:
                     "score": self.score,
                     "avg_norm_score": self.avg_norm_score,
                     "levels_cleared": len(self.level_norms),
+                    "levels_played": len(self.level_sequence),
+                    "setting": self.levels_label(),
                     "time_elapsed": self.elapsed_time,
                     "level": self._level_number(),
                     "won": self.game_won,
@@ -291,6 +293,24 @@ class Arkanoid:
                 }
             )
         return added
+
+    def levels_label(self) -> str:
+        """Label of the configured sequence for the dashboard: map numbers, runs compressed ("1-3", "2", "1,3")."""
+        nums = []
+        for name in self.level_sequence:
+            digits = "".join(ch for ch in name if ch.isdigit())
+            if not digits:
+                return ",".join(self.level_sequence)[:48]
+            nums.append(int(digits))
+        parts: list[str] = []
+        i = 0
+        while i < len(nums):
+            j = i
+            while j + 1 < len(nums) and nums[j + 1] == nums[j] + 1:
+                j += 1
+            parts.append(str(nums[i]) if j == i else f"{nums[i]}-{nums[j]}")
+            i = j + 1
+        return ",".join(parts)
 
     def _level_number(self) -> int | None:
         """Map number (`maps/levelN.json`) of the level the game ended on, None if the file name has no number."""
