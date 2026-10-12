@@ -459,6 +459,8 @@ class TestLogic(unittest.TestCase):
             (["level2.json"], "2"),
             (["level1.json", "level3.json"], "1,3"),
             (["level1.json", "level2.json", "level4.json"], "1-2,4"),
+            (["level3.json", "level1.json", "level2.json"], "1-3"),  # order does not matter
+            (["level1.json", "level1.json"], "1"),  # nor repeats
             (["custom.json"], "custom.json"),
         ):
             game.level_sequence = files

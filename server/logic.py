@@ -295,20 +295,25 @@ class Arkanoid:
         return added
 
     def levels_label(self) -> str:
-        """Label of the configured sequence for the dashboard: map numbers, runs compressed ("1-3", "2", "1,3")."""
-        nums = []
+        """Canonical label of the configured levels for the dashboard: the sorted set of map numbers, runs compressed.
+
+        "1,2,3", "3,1,2" and the default sequence all give "1-3"; "1,3" stays "1,3"; map files without a number
+        are listed by name. Order and repeats do not matter: only the levels played decide who is comparable.
+        """
+        nums: set[int] = set()
         for name in self.level_sequence:
             digits = "".join(ch for ch in name if ch.isdigit())
             if not digits:
                 return ",".join(self.level_sequence)[:48]
-            nums.append(int(digits))
+            nums.add(int(digits))
+        ordered = sorted(nums)
         parts: list[str] = []
         i = 0
-        while i < len(nums):
+        while i < len(ordered):
             j = i
-            while j + 1 < len(nums) and nums[j + 1] == nums[j] + 1:
+            while j + 1 < len(ordered) and ordered[j + 1] == ordered[j] + 1:
                 j += 1
-            parts.append(str(nums[i]) if j == i else f"{nums[i]}-{nums[j]}")
+            parts.append(str(ordered[i]) if j == i else f"{ordered[i]}-{ordered[j]}")
             i = j + 1
         return ",".join(parts)
 
