@@ -63,7 +63,7 @@ Create the venv once. Activate it in **each** terminal you use (the three termin
 
 ### 2. Install the requirements
 
-The requirements are declared in [`pyproject.toml`](pyproject.toml) (`[project] dependencies`: `ai-game-framework`, `numpy`, `pygame`, `websockets`). There is no `requirements.txt`; `pip` reads `pyproject.toml` directly. With the venv active, from the repository root:
+The requirements are declared in [`pyproject.toml`](pyproject.toml) (`[project] dependencies`: `ai-game-framework`, `numpy`, `pygame` (`pygame-ce` on Python 3.14 and newer), `websockets`). There is no `requirements.txt`; `pip` reads `pyproject.toml` directly. With the venv active, from the repository root:
 
 ```bash
 pip install .
@@ -72,6 +72,8 @@ pip install .
 Do this step even if a venv is already active: creating or activating a venv does not install anything. Do not install `aigf` or similar by hand; the framework is the PyPI package `ai-game-framework` and is pulled in by the command above. Re-run `pip install .` after pulling changes that touch `pyproject.toml`. Use `pip install -e .` instead if you want edits to the packages to be picked up without reinstalling.
 
 Check the install with `python -c "import aigf, numpy, pygame, websockets"`. If it fails with `ModuleNotFoundError`, the venv is not active or step 2 was skipped.
+
+Python 3.14 or newer: `pygame` has no wheel for it and the source build ends with `font module not available` (circular import in `pygame.font`) when it misses the SDL2_ttf headers. `pyproject.toml` therefore asks for `pygame-ce` there (same `import pygame`). If you installed `pygame` in a 3.14 venv before, fix it with `pip uninstall -y pygame && pip install .`.
 
 ### 3. Launch three terminals
 

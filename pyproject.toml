@@ -14,7 +14,8 @@ requires-python = ">=3.10"
 dependencies = [
     "ai-game-framework>=1.2.0",
     "numpy>=2.0.0",
-    "pygame>=2.5.0",
+    "pygame>=2.5.0; python_version < '3.14'",
+    "pygame-ce>=2.5.6; python_version >= '3.14'",
     "websockets>=16.0",
 ]
 
