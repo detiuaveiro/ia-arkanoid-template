@@ -231,6 +231,16 @@ class TestLogic(unittest.TestCase):
         self.game._handle_brick_hit(self.game.bricks[0], 0.0, -1.0)  # breaks
         self.assertEqual(self.game.score, 150)
 
+    def test_metal_bricks_report_no_points(self) -> None:
+        # Metal never breaks, so it never scores: the state must not advertise points for it...
+        metal = [b for b in self.game.get_state()["bricks"] if b["indestructible"]]
+        self.assertTrue(metal)
+        self.assertTrue(all(b["points"] == 0 for b in metal))
+        self.assertEqual(self.game.config.bricks.types["metal"].points, 0)
+        # also, when a map or a caller gives it points!
+        brick = Brick(0, 200.0, 100.0, 50.0, 20.0, "metal", -1, True, 10)
+        self.assertEqual(brick.to_dict()["points"], 0)
+
     def test_brick_collision_and_destruction(self) -> None:
         # Create a target destructible brick and another brick to prevent level clear
         self.game.bricks = [
