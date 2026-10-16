@@ -208,6 +208,8 @@ class Arkanoid:
         self._query_id: int = 0
         self._last_query_id: list[int] = []
 
+        for idx in range(len(self.level_sequence)):  # fail at start-up, not when a later level is reached
+            self.load_level(idx)
         self.reset_game()
 
     @property
@@ -339,9 +341,9 @@ class Arkanoid:
 
         try:
             map_data = load_map_file(map_path)
-        except Exception:
-            # Fallback to default generated grid if file is unreadable
-            map_data = {"name": f"Stage {level_idx + 1}", "bricks": []}
+        except (OSError, ValueError) as e:
+            # An empty level has no brick to break, so it would never be cleared: fail instead of loading one.
+            raise ValueError(f"Cannot load level {level_idx + 1} map {map_filename!r}: {e}") from e
 
         self.current_level_name = str(map_data.get("name", f"Stage {level_idx + 1}"))
         self._init_bricks_from_data(map_data.get("bricks", []))

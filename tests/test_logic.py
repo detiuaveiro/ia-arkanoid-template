@@ -1,10 +1,14 @@
 import math
+import os
 import random
+import tempfile
 import unittest
 from typing import Any
 
 import numpy as np
 
+from server.config import AppConfig, load_config
+from server.highscores import HighScoreManager
 from server.logic import Arkanoid, Brick
 
 
@@ -518,6 +522,40 @@ class TestLogic(unittest.TestCase):
         self.game.level_elapsed = 10_000.0
         self.game.update(0.1)
         self.assertFalse(self.game.timed_out)
+
+
+class TestLevelLoading(unittest.TestCase):
+    """A map that cannot be loaded is an error naming it, never an empty level that can not be cleared."""
+
+    def _config(self, maps_dir: str, levels: list[str]) -> AppConfig:
+        cfg = load_config()
+        cfg.game.maps_dir = maps_dir
+        cfg.game.level_sequence = levels
+        return cfg
+
+    def test_missing_map_is_an_error_naming_the_map(self) -> None:
+        with tempfile.TemporaryDirectory() as maps_dir:
+            cfg = self._config(maps_dir, ["missing_level.json"])
+            with self.assertRaises(ValueError) as ctx:
+                Arkanoid(cfg, high_score_manager=HighScoreManager(None))
+        self.assertIn("missing_level.json", str(ctx.exception))
+
+    def test_invalid_map_is_an_error_naming_the_map(self) -> None:
+        for content in ('{"name": "Broken", "bricks": [{"x": 35.0, "y": 120.0,}]}', '{"name": "No bricks list"}'):
+            with self.subTest(content=content), tempfile.TemporaryDirectory() as maps_dir:
+                with open(os.path.join(maps_dir, "broken_level.json"), "w", encoding="utf-8") as f:
+                    f.write(content)
+                cfg = self._config(maps_dir, ["broken_level.json"])
+                with self.assertRaises(ValueError) as ctx:
+                    Arkanoid(cfg, high_score_manager=HighScoreManager(None))
+                self.assertIn("broken_level.json", str(ctx.exception))
+
+    def test_unloadable_later_level_fails_at_start_up(self) -> None:
+        """Every map of the sequence is checked when the game is created, not when its level is reached."""
+        cfg = self._config("maps", ["level1.json", "missing_level.json"])
+        with self.assertRaises(ValueError) as ctx:
+            Arkanoid(cfg, high_score_manager=HighScoreManager(None))
+        self.assertIn("missing_level.json", str(ctx.exception))
 
 
 if __name__ == "__main__":
