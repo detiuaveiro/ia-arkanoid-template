@@ -36,7 +36,6 @@ Arkanoid variant with JSON maps for training and evaluating AI agents, built on 
 4. **Autonomous & Manual Agents (`agents/`)**:
    - [`DummyAgent`](agents/dummy_agent.py): Samples uniformly from `valid_actions` or stays idle.
    - [`ManualAgent`](agents/manual_agent.py): Interactive terminal keyboard driver with live ANSI HUD and A/D or Arrow keys.
-   - Tracker baselines, no learning: [`TrackerV1Agent`](agents/tracker_v1.py) moves towards the ball x and does nothing while the ball is over the centre third of the paddle; [`TrackerV2Agent`](agents/tracker_v2.py) keeps the paddle centre within a dead band of half a paddle step (14 px) of the ball x.
 
 5. **CI Pipeline & Pre-commit Quality Gate**:
    - Git pre-commit hooks (system-installed tools):
@@ -47,6 +46,11 @@ Arkanoid variant with JSON maps for training and evaluating AI agents, built on 
      - `coverage` (at least 80% test coverage)
 
 ---
+
+## Documents
+
+- Group assignment (guide): [English](assets/trab-grupo-arkanoid-en.pdf), [Portuguese](assets/trab-grupo-arkanoid-pt.pdf).
+- Session slides (setup, metric, how to start): [presentation](assets/trab-grupo-arkanoid-slides.pdf).
 
 ## Quick Start
 
