@@ -25,6 +25,12 @@ except ImportError:
     HAS_TERMIOS = False
 
 
+def _safe_print(text: str) -> None:
+    """Print text, replacing characters the output encoding cannot represent (e.g. emoji on a cp1252 pipe)."""
+    encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+    print(text.encode(encoding, errors="replace").decode(encoding))
+
+
 async def receive_loop(
     websocket: Any, stop_event: asyncio.Event | None = None
 ) -> None:
@@ -72,13 +78,13 @@ async def receive_loop(
                 print(f"Active Bricks: {len(bricks)}")
 
                 if game_won:
-                    print("=" * 16 + " 🏆 YOU WON! ALL STAGES CLEARED! 🏆 " + "=" * 16)
+                    _safe_print("=" * 16 + " 🏆 YOU WON! ALL STAGES CLEARED! 🏆 " + "=" * 16)
                     print("\nGame session completed. Stopping agent process.")
                     if stop_event is not None:
                         stop_event.set()
                     break
                 if game_over:
-                    print("=" * 20 + " 💥 GAME OVER! 💥 " + "=" * 20)
+                    _safe_print("=" * 20 + " 💥 GAME OVER! 💥 " + "=" * 20)
                     print("\nGame session completed. Stopping agent process.")
                     if stop_event is not None:
                         stop_event.set()
@@ -87,7 +93,7 @@ async def receive_loop(
                 print("=" * 54)
                 print("\n[CONTROLS] A / Left: West | D / Right: East | Q: Quit")
 
-    except websockets.exceptions.ConnectionClosed:
+    except websockets.ConnectionClosed:
         print("\nDisconnected from Arkanoid Server.")
     finally:
         if stop_event is not None:
