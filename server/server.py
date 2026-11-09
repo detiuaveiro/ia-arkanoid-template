@@ -9,6 +9,7 @@ from typing import Any
 import aigf.interface as interface
 from aigf.main import run_app
 
+from consts import GAME_LEVEL_TIME_LIMIT
 from server.config import AppConfig, load_config, parse_levels
 from server.highscores import HighScoreManager
 from server.logic import Arkanoid
@@ -199,7 +200,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=None,
         help="Seconds of game time allowed per level, 0 disables; game over if a level is not cleared in time "
-        "(default: game.level_time_limit in config.json, 400)",
+        f"(default: game.level_time_limit in config.json, {int(GAME_LEVEL_TIME_LIMIT)})",
     )
     parser.add_argument(
         "-s",
