@@ -46,6 +46,7 @@ class ArkanoidGameServer(interface.GameInterface):
         levels: list[str] | None = None,
         share_highscore: bool = False,
         level_time_limit: float | None = None,
+        seed: int | None = None,
     ) -> None:
         if acceleration <= 0.0:
             raise ValueError("acceleration must be > 0")
@@ -60,6 +61,7 @@ class ArkanoidGameServer(interface.GameInterface):
             self.app_config.game.level_time_limit = level_time_limit
         self.acceleration = acceleration
         self.sim_dt = 1.0 / self.app_config.game.fps
+        self.seed = seed
         # The framework loop sleeps 1/fps between ticks: raising its rate shortens wall-clock time,
         # while every tick still advances the simulation by exactly sim_dt (same dynamics for agents).
         super().__init__(
@@ -68,7 +70,7 @@ class ArkanoidGameServer(interface.GameInterface):
             maps_dir=self.app_config.game.maps_dir,
         )
         scores = HighScoreManager(self.app_config.game.highscores_file if share_highscore else None)
-        self.game = Arkanoid(self.app_config, high_score_manager=scores)
+        self.game = Arkanoid(self.app_config, high_score_manager=scores, seed=seed)
         self.remote: RemoteScoreSubmitter | None = None
         if share_highscore:
             self.remote = RemoteScoreSubmitter(HIGHSCORE_URL)
@@ -173,30 +175,41 @@ class ArkanoidGameServer(interface.GameInterface):
 def build_parser() -> argparse.ArgumentParser:
     """Create the command line parser for the game server."""
     parser = argparse.ArgumentParser(description="Arkanoid AI Game Server")
-    parser.add_argument("--host", type=str, default="0.0.0.0", help="Host address")
-    parser.add_argument("--port", type=int, default=8765, help="Port to run on")
-    parser.add_argument("--config", type=str, default="config.json", help="Path to config.json")
-    parser.add_argument("--fps", type=int, default=30, help="Simulation ticks per simulated second (default: 30)")
+    parser.add_argument("-H", "--host", type=str, default="0.0.0.0", help="Host address")
+    parser.add_argument("-p", "--port", type=int, default=8765, help="Port to run on")
+    parser.add_argument("-c", "--config", type=str, default="config.json", help="Path to config.json")
+    parser.add_argument("-f", "--fps", type=int, default=30, help="Simulation ticks per simulated second (default: 30)")
     parser.add_argument(
+        "-a",
         "--acceleration",
         type=float,
         default=1.0,
         help="Wall-clock speed-up factor, e.g. 10 runs 10x faster for training (default: 1.0)",
     )
     parser.add_argument(
+        "-l",
         "--levels",
         type=str,
         default=None,
         help="Levels to play: N, N,M,... or A-B (e.g. 1 | 1,2,3 | 1-3 | 1,3-5). Default: all in config.json",
     )
     parser.add_argument(
+        "-t",
         "--level-time-limit",
         type=float,
         default=None,
         help="Seconds of game time allowed per level, 0 disables; game over if a level is not cleared in time "
-        "(default: game.level_time_limit in config.json, 600)",
+        "(default: game.level_time_limit in config.json, 400)",
     )
     parser.add_argument(
+        "-s",
+        "--seed",
+        type=int,
+        default=None,
+        help="PRNG seed for reproducible ball refractions and trajectories",
+    )
+    parser.add_argument(
+        "-S",
         "--share-highscore",
         action=argparse.BooleanOptionalAction,
         default=False,
@@ -226,13 +239,15 @@ def main() -> None:
         levels=levels,
         share_highscore=args.share_highscore,
         level_time_limit=args.level_time_limit,
+        seed=args.seed,
     )
     logging.info(
-        "fps=%d acceleration=%.2fx levels=%s level_time_limit=%.0fs share_highscore=%s",
+        "fps=%d acceleration=%.2fx levels=%s level_time_limit=%.0fs seed=%s share_highscore=%s",
         args.fps,
         args.acceleration,
         cfg.game.level_sequence,
         cfg.game.level_time_limit,
+        args.seed,
         args.share_highscore,
     )
     run_app(server, host=args.host, port=args.port)

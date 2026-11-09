@@ -16,9 +16,9 @@ Arkanoid variant with JSON maps for training and evaluating AI agents, built on 
      - α < β is enforced when `config.json` is loaded (`paddle.angles`: `alpha_deg`, `side_deg`, `beta_deg`).
    - **Scoring**: points are awarded only when a brick breaks (its `points` value) with no per-hit points and no stage-clear bonus; damaging a multi-hit brick or bouncing off metal scores nothing.
 
-2. **Configuration & Maps (`config.json`, `maps/`)**:
-   - Constants externalized in [`config.json`](config.json) (screen dimensions, paddle size/speed, ball radius/speed, brick types, point values).
-   - Maps stored in [`maps/`](maps/) as modular JSON files:
+2. **Configuration & Maps (`consts.py`, `config.json`, `maps/`)**:
+   - Constants defined in [`consts.py`](consts.py) and optionally loaded via [`config.json`](config.json) (screen dimensions, paddle size/speed, ball radius/speed, brick types, point values). Metal bricks award 0 points.
+   - Maps stored in [`maps/`](maps/) as modular JSON files (supporting discrete virtual grid `(row, col)` or legacy canvas coordinates):
      - All bricks share uniform dimensions (50x20).
      - Variable health/durability (1-hit red, 2-hit blue, 3-hit green, 4-hit yellow).
      - **Indestructible Metal Bricks**: Deflect the ball without taking damage.
@@ -93,36 +93,50 @@ Manual agent controls: `A` / Left Arrow = West, `D` / Right Arrow = East, `Q` = 
 
 ### Backend options
 
-| Option | Default | Description |
-|---|---|---|
-| `--fps N` | `30` | Simulation ticks per simulated second (each agent action/state exchange is one tick). |
-| `--acceleration X` | `1.0` | Wall-clock speed-up. `10` runs ten times faster; simulated time per tick is unchanged, so agent dynamics stay identical. Use it to speed up training. Capped in practice by CPU/agent latency. |
-| `--levels SPEC` | all levels in `config.json` | `1`, `1,2,3`, `1-3` or mixed `1,3-5`. Level `N` is `maps/levelN.json`; a map file name also works. |
-| `--level-time-limit S` | `600` | Seconds of game time allowed per level (`game.level_time_limit` in `config.json`, `0` disables). If the level is not cleared in time the game is over (`timed_out` in the state); the game only advances to the next level by clearing the current one. |
-| `--share-highscore` / `--no-share-highscore` | off | Off: leaderboard lives in memory only and is lost on exit. On: scores are appended to the local `highscores.csv` and each finished game is uploaded (see below). |
-| `--host`, `--port`, `--config` | `0.0.0.0`, `8765`, `config.json` | Network and config file. |
+| Option | Short | Default | Description |
+|---|---|---|---|
+| `--fps N` | `-f` | `30` | Simulation ticks per simulated second (each agent action/state exchange is one tick). |
+| `--acceleration X` | `-a` | `1.0` | Wall-clock speed-up. `10` runs ten times faster; simulated time per tick is unchanged, so agent dynamics stay identical. Use it to speed up training. |
+| `--levels SPEC` | `-l` | all levels in `config.json` | `1`, `1,2,3`, `1-3` or mixed `1,3-5`. Level `N` is `maps/levelN.json`; a map file name also works. |
+| `--level-time-limit S` | `-t` | `400` | Seconds of game time allowed per level (`0` disables). If not cleared in time the game ends (`timed_out`); advancing requires clearing the level. |
+| `--seed S` | `-s` | `None` | PRNG seed for reproducible ball refractions, launch angles, and controlled evaluation runs. |
+| `--share-highscore` | `-S` | off | Persist finished scores to local CSV (`highscores.csv`) and upload `avg_norm_score`. |
+| `--host`, `--port`, `--config` | `-H`, `-p`, `-c` | `0.0.0.0`, `8765`, `config.json` | Network binding and config file path. |
 
 Examples:
 
 ```bash
-python -m server.server --acceleration 10 --levels 1-3          # fast training run
-python -m server.server --levels 2 --share-highscore            # class competition on stage 2
-python -m server.server --levels 3 --level-time-limit 300       # level 3 only, 5 minutes to clear it
+python -m server.server -a 10 -l 1-3                          # fast training run
+python -m server.server -l 2 -S -s 42                         # seeded competition on stage 2
+python -m server.server -l 3 -t 300                           # level 3 only, 5 minutes to clear it
+```
+
+### Level Designer & Simplified Map JSON (`tools/level_designer.py`)
+
+Levels can be specified using a simplified virtual discrete grid `(row, col)` format (e.g. `{"row": 0, "col": 0, "type": "red"}`), omitting redundant pixel coordinates, canvas dimensions, and calculated colors/points.
+
+The level designer utility provides ASCII conversion, validation, and an interactive Pygame editor:
+
+```bash
+python -m tools.level_designer -g                              # launch visual level designer GUI
+python -m tools.level_designer -v -i maps/level1.json          # validate winnability / reachability
+python -m tools.level_designer -c -i maps/level1.json -o out.json  # convert legacy x/y to grid format
+python -m tools.level_designer -a layout.txt -o maps/new.json  # generate map from ASCII art
 ```
 
 ### Agent options
 
 Both example agents (run from the repository root, with the venv active) take the same options:
 
-| Option | Default | Description |
-|---|---|---|
-| `--server URI` | `ws://localhost:8765/ws` | WebSocket URI of the backend. |
-| `--name TEXT` | `Dummy Agent` / `Manual Arkanoid Driver` | Display name (required non-empty); sanitized by the backend (printable ASCII, max 32 chars). |
-| `--id TEXT` | `AGENT_ID` variable, else random | Agent id, sent to the backend in the handshake. It identifies the agent and is the key used to rank it in the dashboard. |
+| Option | Short | Default | Description |
+|---|---|---|---|
+| `--server URI` | `-s` | `ws://localhost:8765/ws` | WebSocket URI of the backend. |
+| `--name TEXT` | `-n` | `Dummy Agent` / `Manual Arkanoid Driver` | Display name (required non-empty, max 32 chars). |
+| `--id TEXT` | `-i` | `AGENT_ID` variable, else random | Agent id sent in handshake to rank it in the dashboard. |
 
 ```bash
-python -m agents.dummy_agent --id a12345 --name "Random bot"                  # random bot
-python -m agents.manual_agent --id a12345 --server ws://192.168.1.10:8765/ws   # keyboard, remote backend
+python -m agents.dummy_agent -i a12345 -n "Random bot"                      # random bot
+python -m agents.manual_agent -i a12345 -s ws://192.168.1.10:8765/ws        # keyboard, remote backend
 ```
 
 The id comes from, in this order:
