@@ -3,7 +3,6 @@
 import asyncio
 import json
 import logging
-import uuid
 from typing import Any
 
 import websockets
@@ -13,12 +12,6 @@ logging.basicConfig(
 )
 
 
-def resolve_agent_id(agent_id: str | None = None) -> str:
-    """Return the trimmed agent id, or a random one (uuid4 hex) when it is None or empty."""
-    agent_id = (agent_id or "").strip()
-    return agent_id or uuid.uuid4().hex
-
-
 class BaseAgent:
     """Abstract base agent handling WebSocket communication with the game server."""
 
@@ -26,14 +19,12 @@ class BaseAgent:
         self,
         server_uri: str = "ws://localhost:8765/ws",
         name: str = "Agent",
-        agent_id: str | None = None,
     ) -> None:
         name = name.strip()
         if not name:
             raise ValueError("Agent name must not be empty")
         self.server_uri = server_uri
         self.name = name
-        self.agent_id = resolve_agent_id(agent_id)
         self.current_state: dict[str, Any] | None = None
         self.player_id: int | None = None
         self.setup_data: dict[str, Any] | None = None
@@ -43,8 +34,8 @@ class BaseAgent:
         """Connect to game server and run the observation-action loop."""
         try:
             async with websockets.connect(self.server_uri) as websocket:
-                await websocket.send(json.dumps({"client": "agent", "name": self.name, "id": self.agent_id}))
-                logging.info("Connected to %s as %s (id %s)", self.server_uri, self.name, self.agent_id)
+                await websocket.send(json.dumps({"client": "agent", "name": self.name}))
+                logging.info("Connected to %s as %s", self.server_uri, self.name)
 
                 # Read the socket in its own task and keep only the newest state, so a slow deliberate()
                 # acts on the current game instead of working through a backlog of obsolete states.
@@ -110,7 +101,7 @@ class BaseAgent:
         if isinstance(stage, int) and isinstance(stages, int):
             stage = min(stage, stages)  # after the last level is cleared the server counts one past it
         rows = [
-            ("Agent", f"{self.name} (id {self.agent_id})"),
+            ("Agent", self.name),
             ("Stop reason", self.stop_reason),
             ("Level", f"{stage} of {stages}: {s.get('stage_name', s.get('level_name', '?'))}"),
             ("Score", str(s.get("score", 0))),

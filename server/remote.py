@@ -30,8 +30,8 @@ def display_name(name: Any) -> str | None:
 def to_result(record: dict[str, Any]) -> dict[str, Any]:
     """Map the game-end record to the dashboard body (`player_id`, `scores`, `play_time`, `setting`, `details`)."""
     return {
-        "player_id": record.get("id"),
-        "player_name": display_name(record.get("name")),
+        # no player_id: the dashboard derives it from the name (a hash), the game never handles an id
+        "player_name": display_name(record.get("name")) or "PLAYER",
         "scores": {
             "levels_cleared": record.get("levels_cleared", 0),
             "avg_norm_score": record.get("avg_norm_score", 0.0),

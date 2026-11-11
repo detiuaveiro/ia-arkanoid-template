@@ -19,7 +19,6 @@ from server.logic import Arkanoid
 from server.remote import RemoteScoreSubmitter
 
 RECORD_TYPES: dict[str, tuple[type, ...]] = {
-    "id": (str,),
     "name": (str,),
     "score": (int,),
     "avg_norm_score": (int, float),
@@ -41,7 +40,6 @@ def finished_game(
     game.score_listener = records.append
     game.high_score_manager.filepath = None
     game.player_name = "ann"
-    game.agent_id = "a1"
     game.score = 1234
     game.elapsed_time = game.level_elapsed = 80.0
     game.level_norms = list(norms)
@@ -147,27 +145,27 @@ class TestWire(unittest.TestCase):
             sub.send(record)  # blocking variant of `submit`
 
         game.score_listener = blocking
-        game.agent_id, game.player_name, game.score = "a1", "ann", 10
+        game.player_name, game.score = "ann", 10
         game.record_high_score()
         (req,) = _Capture.seen
         self.assertEqual((req["method"], req["path"]), ("PUT", "/api/v1/results"))
         self.assertEqual(req["type"], "application/json")
         self.assertEqual(req["auth"], "Bearer tok")
-        self.assertEqual(req["body"]["player_id"], "a1")
-        self.assertEqual(set(req["body"]), {"player_id", "player_name", "scores", "play_time", "setting", "details"})
+        self.assertEqual(req["body"]["player_name"], "ann")
+        self.assertEqual(set(req["body"]), {"player_name", "scores", "play_time", "setting", "details"})
         self.assertEqual(set(req["body"]["scores"]), {"levels_cleared", "avg_norm_score", "highscore"})
 
     def test_server_error_is_logged_and_does_not_stop_the_game(self) -> None:
         for status in (401, 422, 500):
             _Capture.status = status
             with self.subTest(status=status), self.assertLogs(level="WARNING"):
-                self.assertFalse(RemoteScoreSubmitter(f"{self.base}/api/v1/results", token="x").send({"id": "a"}))
+                self.assertFalse(RemoteScoreSubmitter(f"{self.base}/api/v1/results", token="x").send({"name": "a"}))
 
     def test_timeout_is_bounded(self) -> None:
         """A dashboard that never answers costs the game at most the timeout, in a background thread."""
         sub = RemoteScoreSubmitter(f"{self.base}/api/v1/results", timeout=0.5)
         with mock.patch("urllib.request.urlopen", side_effect=TimeoutError("slow")) as op:
-            self.assertFalse(sub.send({"id": "a"}))
+            self.assertFalse(sub.send({"name": "a"}))
         self.assertEqual(op.call_args.kwargs["timeout"], 0.5)
 
     def test_submit_returns_immediately(self) -> None:
@@ -181,7 +179,7 @@ class TestWire(unittest.TestCase):
 
         sub = RemoteScoreSubmitter(f"{self.base}/api/v1/results")
         with mock.patch.object(sub, "send", side_effect=slow):
-            sub.submit({"id": "a"})
+            sub.submit({"name": "a"})
             self.assertTrue(started.wait(1.0))
             release.set()
 
@@ -214,7 +212,7 @@ class TestLiveDryRun(unittest.TestCase):
 
         before = games()
         record = finished_game(norms=[12.5], sequence=["maps/level1.json"], won=True)
-        record["id"] = "contract-test"
+        record["name"] = "contract-test"
         sub = RemoteScoreSubmitter(f"{base}/api/v1/results", dry_run=True)
         self.assertTrue(sub.send(record))
         self.assertEqual(games(), before)

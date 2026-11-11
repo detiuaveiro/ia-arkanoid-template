@@ -2,8 +2,6 @@
 
 import argparse
 import logging
-import re
-import uuid
 from typing import Any
 
 import aigf.interface as interface
@@ -16,7 +14,6 @@ from server.logic import Arkanoid
 from server.remote import HIGHSCORE_URL, RemoteScoreSubmitter
 
 _MAX_NAME_LEN = 32
-_MAX_ID_LEN = 64
 _MAX_SUBSTEP = 0.05  # seconds of simulated time per physics call
 
 logging.basicConfig(
@@ -28,12 +25,6 @@ def sanitize_name(raw: object) -> str:
     """Clean an agent-supplied name: printable ASCII only, trimmed, max 32 chars, else "PLAYER"."""
     text = "".join(ch for ch in str(raw) if " " <= ch <= "~").strip()
     return text[:_MAX_NAME_LEN].strip() or "PLAYER"
-
-
-def sanitize_id(raw: object) -> str:
-    """Clean an agent-supplied id: [A-Za-z0-9._-] only, max 64 chars, else a random uuid4 hex."""
-    text = re.sub(r"[^A-Za-z0-9._-]", "", str(raw or ""))[:_MAX_ID_LEN]
-    return text or uuid.uuid4().hex
 
 
 class ArkanoidGameServer(interface.GameInterface):
@@ -97,7 +88,6 @@ class ArkanoidGameServer(interface.GameInterface):
         name = data.get("name")
         if name and isinstance(name, str):
             self.game.player_name = sanitize_name(name)
-        self.game.agent_id = sanitize_id(data.get("id"))
 
     async def on_player_disconnect(self, player_id: int) -> None:
         """Handle agent disconnection."""
@@ -105,7 +95,6 @@ class ArkanoidGameServer(interface.GameInterface):
         if self.player_id == player_id:
             self.player_id = None
             self.game.player_name = "PLAYER"
-            self.game.agent_id = None
             self.state = interface.GameState.LOBBY
             self.game.reset_game()
             logging.info("Server reset to LOBBY awaiting a new agent.")

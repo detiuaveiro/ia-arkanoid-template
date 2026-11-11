@@ -55,7 +55,6 @@ class TestRemoteSubmitter(unittest.TestCase):
             server = ArkanoidGameServer(share_highscore=True)
         server.game.high_score_manager.filepath = None
         server.game.player_name = "ann"
-        server.game.agent_id = "a1"
         server.game.score = 1000
         server.game.elapsed_time = server.game.level_elapsed = 50.0
         server.game.level_norms = [20.0]  # one level cleared at 20 points/s ...
@@ -68,7 +67,6 @@ class TestRemoteSubmitter(unittest.TestCase):
         self.assertEqual(
             received[0]["body"],
             {
-                "player_id": "a1",
                 "player_name": "ann",
                 "scores": {"levels_cleared": 1, "avg_norm_score": 20.0, "highscore": 1000},
                 "play_time": 50.0,
@@ -155,7 +153,7 @@ class TestDashboardEndpoint(unittest.TestCase):
         threading.Thread(target=httpd.serve_forever, daemon=True).start()
         try:
             sub = RemoteScoreSubmitter(f"http://127.0.0.1:{httpd.server_port}/api/v1/results", token="bad")
-            self.assertFalse(sub.send({"id": "a1"}))
+            self.assertFalse(sub.send({"name": "a1"}))
         finally:
             httpd.shutdown()
             httpd.server_close()
@@ -172,7 +170,7 @@ class TestDashboardFields(unittest.TestCase):
         from server.remote import display_name
 
         sub = RemoteScoreSubmitter("http://x/api/v1/results", is_test=True)
-        body = json.loads(sub.build_request({"id": "a", "name": "Zoë " + "x" * 40}).data)  # type: ignore[arg-type]
+        body = json.loads(sub.build_request({"name": "Zoë " + "x" * 40}).data)  # type: ignore[arg-type]
         self.assertTrue(body["is_test"])
         self.assertEqual(body["player_name"], "Zo " + "x" * 29)
         plain = json.loads(RemoteScoreSubmitter("http://x/y", is_test=False).build_request({}).data)  # type: ignore[arg-type]
