@@ -152,7 +152,9 @@ class Arkanoid:
             else HighScoreManager(filepath=self.config.game.highscores_file)
         )
         self.seed = seed
-        self.rng: Any = random.Random(seed) if seed is not None else random
+        # Seed: numpy Generator (reproducible). No seed: OS entropy, so an agent cannot recover
+        # the generator state from observed angles.
+        self.rng: Any = np.random.default_rng(seed) if seed is not None else random.SystemRandom()
         self.player_name = "PLAYER"
         self.agent_id: str | None = None
         self.score_listener: Callable[[dict[str, Any]], None] | None = None
@@ -246,7 +248,7 @@ class Arkanoid:
     def reset_game(self) -> None:
         """Reset the full game session back to level 1."""
         if self.seed is not None:
-            self.rng = random.Random(self.seed)
+            self.rng = np.random.default_rng(self.seed)
         self.lives = self.config.game.lives
         self.score = 0
         self.elapsed_time = 0.0
@@ -291,7 +293,6 @@ class Arkanoid:
                     "score": self.score,
                     "avg_norm_score": self.avg_norm_score,
                     "levels_cleared": len(self.level_norms),
-                    "levels_played": len(self.level_sequence),
                     "setting": self.levels_label(),
                     "time_elapsed": self.elapsed_time,
                     "level": self._level_number(),
@@ -465,7 +466,7 @@ class Arkanoid:
         self.ball_y = self.paddle_y - self.ball_radius - 2.0
 
         # Initial launch angle between -30 and +30 degrees
-        angle = self.rng.uniform(-math.pi / 6.0, math.pi / 6.0)
+        angle = float(self.rng.uniform(-math.pi / 6.0, math.pi / 6.0))
         self.ball_vx = self.ball_speed * math.sin(angle)
         self.ball_vy = -self.ball_speed * math.cos(angle)
 
@@ -491,6 +492,12 @@ class Arkanoid:
         else:
             self.reset_paddle_and_ball()
 
+    def _triangular(self, low: float, mode: float, high: float) -> float:
+        """Triangular draw; numpy's Generator takes (left, mode, right), `random` takes (low, high, mode)."""
+        if isinstance(self.rng, np.random.Generator):
+            return float(self.rng.triangular(low, mode, high))
+        return float(self.rng.triangular(low, high, mode))
+
     def _calculate_paddle_bounce_angle(self, relative_x: float) -> float:
         """
         Bounce angle (radians from vertical, negative = left) for the 3-region paddle:
@@ -510,7 +517,7 @@ class Arkanoid:
             centre, half = cfg.side_deg, cfg.beta_deg
         else:
             centre, half = 0.0, cfg.alpha_deg
-        return math.radians(self.rng.triangular(centre - half, centre + half, centre))
+        return math.radians(self._triangular(centre - half, centre, centre + half))
 
     def _handle_paddle_bounce(self, hit_x: float) -> None:
         """Resolve ball bounce off the paddle using the 3-region angle distribution."""

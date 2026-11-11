@@ -1,7 +1,11 @@
 """Unit tests for level designer tool and map converters."""
 
+import json
+import os
+import tempfile
 import unittest
 
+from server.config import load_map_file
 from tools.level_designer import (
     ascii_to_map,
     build_parser,
@@ -46,6 +50,25 @@ class TestLevelDesigner(unittest.TestCase):
         self.assertEqual(len(grid_data["bricks"]), 2)
         self.assertEqual(grid_data["bricks"][0], {"row": 0, "col": 0, "type": "red"})
         self.assertEqual(grid_data["bricks"][1], {"row": 1, "col": 2, "type": "blue"})
+
+    def test_convert_keeps_official_map_positions(self) -> None:
+        """Converting an official map to grid form and loading it back leaves every brick where it was."""
+        for name in ("level1.json", "level2.json", "level3.json"):
+            original = load_map_file(f"maps/{name}")
+            with tempfile.TemporaryDirectory() as tmp:
+                path = os.path.join(tmp, name)
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(convert_map_to_grid(original), f)
+                converted = load_map_file(path)
+            before = sorted((b["x"], b["y"], b["type"]) for b in original["bricks"])
+            after = sorted((b["x"], b["y"], b["type"]) for b in converted["bricks"])
+            self.assertEqual(before, after, name)
+
+    def test_convert_rejects_off_grid_map(self) -> None:
+        """A brick that does not sit on the grid is an error, not a brick moved to the nearest cell."""
+        off_grid = {"bricks": [{"x": 35.0, "y": 120.0, "type": "red"}, {"x": 40.0, "y": 145.0, "type": "red"}]}
+        with self.assertRaises(ValueError):
+            convert_map_to_grid(off_grid)
 
     def test_validate_map_winnable(self) -> None:
         unreachable = validate_map_winnable("maps/level1.json")

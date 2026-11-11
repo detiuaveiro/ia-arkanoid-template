@@ -151,15 +151,17 @@ Custom agents subclass `BaseAgent(server_uri, name, agent_id)` and implement `de
 
 ### Remote highscore upload (HTTP PUT)
 
-With `--share-highscore`, every finished game (game over or victory) is sent as one `PUT` with a minimal JSON body:
+With `--share-highscore`, every finished game (game over or victory) is sent as one `PUT /api/v1/results` to the course dashboard, with this JSON body:
 
 ```json
-{"id": "a12345", "name": "ann", "score": 4200, "avg_norm_score": 31.5, "levels_cleared": 2, "levels_played": 3, "setting": "1-3", "time_elapsed": 133.2, "level": 2, "won": true, "timed_out": false}
+{"player_id": "a12345", "player_name": "ann",
+ "scores": {"levels_cleared": 2, "avg_norm_score": 31.5, "highscore": 4200},
+ "play_time": 133.2, "setting": "1-3", "details": {"level": 2, "won": true, "timed_out": false}}
 ```
 
-`id` is the agent id (see Agent options) and the key to rank by, `name` is the display name, `score` is the raw points, `avg_norm_score` is the graded value (the mean over all the levels of the sequence of each level's points per second, 0 for a level that was not cleared), `levels_cleared` is how many levels were cleared, `levels_played` how many levels the configured sequence has and `setting` its canonical label (the sorted set of levels, runs compressed: `--levels 1,2,3`, `3,1,2` and the default all give `1-3`; `2`; `1,3`; the dashboard compares players with the same setting), `time_elapsed` is the game time in seconds, `level` is the map number (`maps/levelN.json`) the game ended on, `won` is true when every level played was cleared and `timed_out` is true when a level exceeded its maximum duration. Rank by `avg_norm_score` and use `score` as the tie-break (and to sort the games that cleared nothing).
+`player_id` is the agent id (see Agent options) and the key to rank by, `player_name` is the display name, `highscore` is the raw points, `avg_norm_score` is the graded value (the mean over all the levels of the sequence of each level's points per second, 0 for a level that was not cleared), `levels_cleared` is how many levels were cleared and `setting` the canonical label of the levels played (the sorted set of levels, runs compressed: `--levels 1,2,3`, `3,1,2` and the default all give `1-3`; `2`; `1,3`; the dashboard compares players with the same setting), `play_time` is the game time in seconds, `details.level` is the map number (`maps/levelN.json`) the game ended on, `won` is true when every level played was cleared and `timed_out` is true when a level exceeded its maximum duration. Rank by `avg_norm_score` and use `highscore` as the tie-break (and to sort the games that cleared nothing).
 
-The endpoint is read from `ARKANOID_HS_URL` (default: the placeholder `HIGHSCORE_URL` in [`server/remote.py`](server/remote.py)); the companion `aigf-dashboard` service accepts it at `/api/highscores`. Set `ARKANOID_HS_TOKEN` to add an `Authorization: Bearer <token>` header (env only, never a CLI flag). The upload runs on a background thread with a 5 s timeout; failures are logged and never interrupt the game (the local CSV file still keeps the score). No retry queue yet. The service side is not part of this repo.
+The endpoint is read from `ARKANOID_HS_URL` (default: the course dashboard `https://dashboard.av.it.pt/api/v1/results`, `DEFAULT_HIGHSCORE_URL` in [`server/remote.py`](server/remote.py)); the companion `aigf-dashboard` service accepts it at `/api/v1/results`. The upload-only token of the course dashboard is built into `server/remote.py` (`DEFAULT_TOKEN`), so every student can submit without setup; it can only upload. `ARKANOID_HS_TOKEN` overrides it. The token is sent as an `Authorization: Bearer <token>` header (set it in the environment, never as a CLI flag). `ARKANOID_HS_DRY_RUN=1` appends `?dry_run=true`: the dashboard validates the upload and stores nothing (use it to test the connection and the token). `ARKANOID_HS_TEST=1` sends `is_test: true`: the result is stored but hidden from the ranking and histogram. `player_name` is cut to 32 printable ASCII characters. The upload runs on a background thread with a 5 s timeout; failures are logged and never interrupt the game (the local CSV file still keeps the score). No retry queue yet. The service side is not part of this repo.
 
 ### High score file
 

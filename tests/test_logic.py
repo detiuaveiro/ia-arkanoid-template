@@ -192,8 +192,7 @@ class TestLogic(unittest.TestCase):
         cfg = self.game.config.paddle.angles
         limit = cfg.side_deg + cfg.beta_deg
         for offset in (0.0, 0.4, -0.4):
-            random.seed(7)
-            game = Arkanoid(config=self.game.config, high_score_manager=self.game.high_score_manager)
+            game = Arkanoid(config=self.game.config, high_score_manager=self.game.high_score_manager, seed=7)
             angles: list[float] = []
             original = game._handle_paddle_bounce
 
@@ -546,6 +545,28 @@ class TestLogic(unittest.TestCase):
             game2.update(0.05)
             self.assertEqual(game1.ball_x, game2.ball_x)
             self.assertEqual(game1.ball_y, game2.ball_y)
+
+    def test_unseeded_rng_is_not_module_random(self) -> None:
+        """Without a seed the game uses OS entropy, so reseeding `random` cannot predict launches."""
+        random.seed(1)
+        first = Arkanoid().ball_vx
+        random.seed(1)
+        runs = {Arkanoid().ball_vx for _ in range(5)}
+        self.assertIsInstance(Arkanoid().rng, random.SystemRandom)
+        self.assertIsInstance(Arkanoid(seed=1).rng, np.random.Generator)
+        self.assertGreater(len(runs | {first}), 1)
+
+    def test_both_generators_draw_bounce_angles_inside_the_cones(self) -> None:
+        """Seeded (numpy) and unseeded (SystemRandom) games give the same kind of angle in every paddle region."""
+        for seed in (3, None):
+            game = Arkanoid(seed=seed)
+            cfg = game.config.paddle.angles
+            w = game.paddle_width
+            regions = ((0.0, -cfg.side_deg, cfg.beta_deg), (w / 2, 0.0, cfg.alpha_deg), (w, cfg.side_deg, cfg.beta_deg))
+            for rel, centre, half in regions:
+                angles = [math.degrees(game._calculate_paddle_bounce_angle(rel)) for _ in range(400)]
+                self.assertTrue(all(centre - half <= a <= centre + half for a in angles), (seed, rel))
+                self.assertAlmostEqual(sum(angles) / len(angles), centre, delta=half / 3)
 
     def test_grid_map_row_col_loading(self) -> None:
         """Simplified grid maps with row/col load correctly into canvas positions."""

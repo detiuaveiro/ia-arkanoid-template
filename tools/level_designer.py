@@ -85,6 +85,46 @@ def ascii_to_map(
     }
 
 
+def _pitch(values: list[float], default: float, size: float) -> float:
+    """Return the default step when the coordinates fit it, else their common step (gcd of the gaps).
+
+    A common step smaller than a brick would overlap the bricks, so it is no grid: the default is returned and
+    `convert_map_to_grid` rejects the bricks that do not fit it.
+    """
+    from math import gcd
+
+    vals = sorted({round(v, 3) for v in values})
+    if not vals:
+        return default
+    if all(abs((v - vals[0]) / default - round((v - vals[0]) / default)) < 1e-6 for v in vals):
+        return default
+    step = 0
+    for a, b in zip(vals, vals[1:], strict=False):
+        step = gcd(step, int(round((b - a) * 10)))
+    return step / 10 if step >= size * 10 else default
+
+
+def infer_grid(map_data: dict[str, Any]) -> dict[str, float]:
+    """Return margin and gap of a map: explicit `grid` keys win, else they are read from the bricks.
+
+    Official maps do not share the default margins and gaps of `consts.py`, so the origin
+    is the top-left brick and the pitch the common step between brick coordinates.
+    """
+    grid = map_data.get("grid", {})
+    b_w = float(map_data.get("brick_width", BRICK_WIDTH))
+    b_h = float(map_data.get("brick_height", BRICK_HEIGHT))
+    pts = [b for b in map_data.get("bricks", []) if "x" in b and "y" in b and "row" not in b]
+    xs = [float(b["x"]) for b in pts]
+    ys = [float(b["y"]) for b in pts]
+    inferred: dict[str, float] = {
+        "margin_x": min(xs) if xs else GRID_MARGIN_X,
+        "margin_y": min(ys) if ys else GRID_MARGIN_Y,
+        "gap_x": _pitch(xs, b_w + GRID_GAP_X, b_w) - b_w,
+        "gap_y": _pitch(ys, b_h + GRID_GAP_Y, b_h) - b_h,
+    }
+    return {k: float(grid.get(k, v)) for k, v in inferred.items()}
+
+
 def map_to_ascii(map_data: dict[str, Any]) -> str:
     """Render a map dictionary into an ASCII diagram string."""
     grid = map_data.get("grid", {})
@@ -92,10 +132,8 @@ def map_to_ascii(map_data: dict[str, Any]) -> str:
     rows = int(grid.get("rows", GRID_ROWS))
 
     char_grid = [["." for _ in range(cols)] for _ in range(rows)]
-    margin_x = float(grid.get("margin_x", GRID_MARGIN_X))
-    margin_y = float(grid.get("margin_y", GRID_MARGIN_Y))
-    gap_x = float(grid.get("gap_x", GRID_GAP_X))
-    gap_y = float(grid.get("gap_y", GRID_GAP_Y))
+    geo = infer_grid(map_data)
+    margin_x, margin_y, gap_x, gap_y = geo["margin_x"], geo["margin_y"], geo["gap_x"], geo["gap_y"]
     b_w = float(map_data.get("brick_width", BRICK_WIDTH))
     b_h = float(map_data.get("brick_height", BRICK_HEIGHT))
 
@@ -115,13 +153,14 @@ def map_to_ascii(map_data: dict[str, Any]) -> str:
 
 
 def convert_map_to_grid(map_data: dict[str, Any]) -> dict[str, Any]:
-    """Convert an existing map (with legacy canvas coordinates) to simplified grid format."""
+    """Convert an existing map (with legacy canvas coordinates) to simplified grid format.
+
+    Raises ValueError when a brick does not sit on the grid of the map: rounding it to a cell would move it.
+    """
     grid = map_data.get("grid", {})
     cols = int(grid.get("cols", GRID_COLS))
-    margin_x = float(grid.get("margin_x", GRID_MARGIN_X))
-    margin_y = float(grid.get("margin_y", GRID_MARGIN_Y))
-    gap_x = float(grid.get("gap_x", GRID_GAP_X))
-    gap_y = float(grid.get("gap_y", GRID_GAP_Y))
+    geo = infer_grid(map_data)
+    margin_x, margin_y, gap_x, gap_y = geo["margin_x"], geo["margin_y"], geo["gap_x"], geo["gap_y"]
     b_w = float(map_data.get("brick_width", BRICK_WIDTH))
     b_h = float(map_data.get("brick_height", BRICK_HEIGHT))
 
@@ -134,6 +173,8 @@ def convert_map_to_grid(map_data: dict[str, Any]) -> dict[str, Any]:
             x, y = float(b.get("x", 0.0)), float(b.get("y", 0.0))
             c = int(round((x - margin_x) / (b_w + gap_x)))
             r = int(round((y - margin_y) / (b_h + gap_y)))
+            if abs(margin_x + c * (b_w + gap_x) - x) > 1e-6 or abs(margin_y + r * (b_h + gap_y) - y) > 1e-6:
+                raise ValueError(f"Brick at ({x}, {y}) does not fit a regular grid")
         max_row = max(max_row, r)
         b_type = str(b.get("type", "red"))
         simplified_bricks.append({"row": r, "col": c, "type": b_type})
@@ -210,6 +251,7 @@ def validate_map_winnable(map_data_or_path: dict[str, Any] | str) -> list[tuple[
 def run_gui(output_path: str = "maps/custom_level.json", initial_map: str | None = None) -> None:
     """Launch interactive Pygame level designer GUI."""
     import pygame
+
     from server.config import load_map_file
 
     pygame.init()
@@ -222,10 +264,7 @@ def run_gui(output_path: str = "maps/custom_level.json", initial_map: str | None
 
     cols = GRID_COLS
     rows = 12
-    margin_x = GRID_MARGIN_X
-    margin_y = GRID_MARGIN_Y
-    gap_x = GRID_GAP_X
-    gap_y = GRID_GAP_Y
+    margin_x, margin_y, gap_x, gap_y = GRID_MARGIN_X, GRID_MARGIN_Y, GRID_GAP_X, GRID_GAP_Y
     b_w = BRICK_WIDTH
     b_h = BRICK_HEIGHT
 
@@ -234,17 +273,16 @@ def run_gui(output_path: str = "maps/custom_level.json", initial_map: str | None
     level_name = "Custom Level"
 
     if initial_map and os.path.exists(initial_map):
-        data = load_map_file(initial_map)
-        level_name = str(data.get("name", "Custom Level"))
-        for b in data.get("bricks", []):
-            if "row" in b and "col" in b:
-                r, c = int(b["row"]), int(b["col"])
-            else:
-                x, y = float(b["x"]), float(b["y"])
-                c = int(round((x - margin_x) / (b_w + gap_x)))
-                r = int(round((y - margin_y) / (b_h + gap_y)))
-            if 0 <= r < rows and 0 <= c < cols:
-                grid_cells[r][c] = b.get("type", "red")
+        data = convert_map_to_grid(load_map_file(initial_map))
+        level_name = str(data["name"])
+        b_w, b_h = float(data["brick_width"]), float(data["brick_height"])
+        g = data["grid"]
+        margin_x, margin_y, gap_x, gap_y = g["margin_x"], g["margin_y"], g["gap_x"], g["gap_y"]
+        rows = max(rows, int(g["rows"]))
+        grid_cells = [[None for _ in range(cols)] for _ in range(rows)]
+        for b in data["bricks"]:
+            if 0 <= b["row"] < rows and 0 <= b["col"] < cols:
+                grid_cells[b["row"]][b["col"]] = b["type"]
 
     palette = ["red", "blue", "green", "yellow", "metal", None]
     palette_labels = ["1:Red", "2:Blue", "3:Green", "4:Yellow", "M:Metal", "0:Clear"]
@@ -361,7 +399,7 @@ def run_gui(output_path: str = "maps/custom_level.json", initial_map: str | None
         # Palette buttons at top
         px = margin_x
         py = 55
-        for idx, (p_type, p_label) in enumerate(zip(palette, palette_labels)):
+        for p_type, p_label in zip(palette, palette_labels, strict=True):
             btn_rect = pygame.Rect(px, py, 75, 24)
             color = TYPE_COLORS.get(p_type or "", (76, 86, 106))
             pygame.draw.rect(screen, color, btn_rect, border_radius=3)
@@ -404,7 +442,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-i", "--input", type=str, default=None, help="Input map path (load/convert/validate)")
     parser.add_argument("-a", "--ascii", type=str, default=None, help="Generate from ASCII text file")
     parser.add_argument("-c", "--convert", action="store_true", help="Convert legacy x/y map to simplified grid JSON")
-    parser.add_argument("-v", "--validate", action="store_true", help="Validate that all destructible bricks are reachable")
+    parser.add_argument(
+        "-v", "--validate", action="store_true", help="Validate that all destructible bricks are reachable"
+    )
     parser.add_argument("-g", "--gui", action="store_true", help="Launch interactive Pygame level designer GUI")
     return parser
 
