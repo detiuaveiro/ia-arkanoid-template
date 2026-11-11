@@ -156,7 +156,6 @@ class Arkanoid:
         # the generator state from observed angles.
         self.rng: Any = np.random.default_rng(seed) if seed is not None else random.SystemRandom()
         self.player_name = "PLAYER"
-        self.agent_id: str | None = None
         self.score_listener: Callable[[dict[str, Any]], None] | None = None
         self._score_recorded = False
 
@@ -276,7 +275,6 @@ class Arkanoid:
         added = self.high_score_manager.add_score(
             self.score,
             player=self.player_name,
-            agent_id=self.agent_id or "",
             time_elapsed=self.elapsed_time,
             avg_norm_score=self.avg_norm_score,
         )
@@ -288,7 +286,6 @@ class Arkanoid:
         if self.score_listener is not None:
             self.score_listener(
                 {
-                    "id": self.agent_id,
                     "name": self.player_name,
                     "score": self.score,
                     "avg_norm_score": self.avg_norm_score,

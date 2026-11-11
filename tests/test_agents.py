@@ -164,25 +164,25 @@ class TestAgents(unittest.IsolatedAsyncioTestCase):
             async def __aexit__(self, *args: object) -> None:
                 return None
 
-        agent = ConcreteBaseAgent(name="Summary Bot", agent_id="s1")
+        agent = ConcreteBaseAgent(name="Summary Bot")
         out = io.StringIO()
         with mock.patch("websockets.connect", return_value=MockConnectContext()), contextlib.redirect_stdout(out):
             await agent.run()
         text = out.getvalue()
         self.assertIn("AGENT STOPPED", text)
-        self.assertIn("Summary Bot (id s1)", text)
+        self.assertIn("Summary Bot", text)
         self.assertIn("time limit reached", text)
         self.assertIn("2 of 3: Level 2", text)
         self.assertIn("7.50 points/s", text)
         self.assertIn("600.0 s of 600 s", text)
 
     def test_summary_caps_the_level_after_the_last_one_is_cleared(self) -> None:
-        agent = ConcreteBaseAgent(name="Won", agent_id="w1")
+        agent = ConcreteBaseAgent(name="Won")
         agent.current_state = {"stage": 4, "max_stages": 3, "stage_name": "Stage 3"}
         self.assertIn("3 of 3", agent.summary())
 
     def test_summary_without_any_state_does_not_fail(self) -> None:
-        agent = ConcreteBaseAgent(name="Idle", agent_id="i1")
+        agent = ConcreteBaseAgent(name="Idle")
         self.assertIn("connection closed", agent.summary())
 
     async def test_base_agent_stops_on_game_won(self) -> None:
@@ -244,12 +244,6 @@ class TestAgentName(unittest.TestCase):
         self.assertEqual(DummyAgent(name="  ann ").name, "ann")
         with self.assertRaises(ValueError):
             DummyAgent(name="  ")
-
-    def test_id_given_or_generated(self) -> None:
-        self.assertEqual(DummyAgent(agent_id=" a1 ").agent_id, "a1")
-        auto = DummyAgent().agent_id
-        self.assertEqual(len(auto), 32)
-        self.assertNotEqual(auto, DummyAgent().agent_id)
 
 
 CLOSED = object()

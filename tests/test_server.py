@@ -3,7 +3,7 @@ import unittest
 
 import aigf.interface as interface
 
-from server.server import ArkanoidGameServer, build_parser, sanitize_id, sanitize_name
+from server.server import ArkanoidGameServer, build_parser, sanitize_name
 
 
 class TestServer(unittest.IsolatedAsyncioTestCase):
@@ -165,12 +165,6 @@ class TestSanitizeName(unittest.TestCase):
         self.assertEqual(sanitize_name("\x00\x01"), "PLAYER")
         self.assertEqual(sanitize_name("Ünï"), "n")
 
-    def test_sanitize_id(self) -> None:
-        self.assertEqual(sanitize_id(" a12 345/../x "), "a12345..x")
-        self.assertEqual(len(sanitize_id("x" * 100)), 64)
-        generated = sanitize_id(None)
-        self.assertEqual(len(generated), 32)
-        self.assertNotEqual(generated, sanitize_id(""))
 
 
 if __name__ == "__main__":

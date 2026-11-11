@@ -10,10 +10,6 @@ from typing import Any
 
 import websockets
 
-from agents.base_agent import resolve_agent_id
-
-AGENT_ID: str | None = None  # your id (e.g. "a12345"); --id overrides it; None = random
-
 try:
     import termios
     import tty
@@ -174,14 +170,13 @@ async def send_loop(
 async def run_manual_agent(
     url: str = "ws://localhost:8765/ws",
     name: str = "Manual Arkanoid Driver",
-    agent_id: str | None = None,
 ) -> None:
     """Connect to WebSocket server and launch send/receive tasks."""
     print(f"Connecting to Arkanoid Server on {url}...")
     try:
         async with websockets.connect(url) as websocket:
             await websocket.send(
-                json.dumps({"client": "agent", "name": name, "id": resolve_agent_id(agent_id)})
+                json.dumps({"client": "agent", "name": name})
             )
             stop_event = asyncio.Event()
             rec_task = asyncio.create_task(receive_loop(websocket, stop_event))
@@ -207,12 +202,11 @@ def main() -> None:
     parser.add_argument(
         "-n", "--name", default="Manual Arkanoid Driver", help="Player name shown in the high score table"
     )
-    parser.add_argument("-i", "--id", default=None, help="Agent id, used to rank it (default: AGENT_ID, else random)")
     args = parser.parse_args()
     if not args.name.strip():
         parser.error("--name must not be empty")
     try:
-        asyncio.run(run_manual_agent(args.server, args.name.strip(), args.id or AGENT_ID))
+        asyncio.run(run_manual_agent(args.server, args.name.strip()))
     except KeyboardInterrupt:
         print("\nManual agent stopped.")
 
