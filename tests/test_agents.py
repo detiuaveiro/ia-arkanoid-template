@@ -1,6 +1,11 @@
 import asyncio
+import contextlib
+import io
 import json
 import unittest
+import unittest.mock as mock
+from collections.abc import AsyncIterator
+from typing import Any
 
 from agents.base_agent import BaseAgent
 from agents.dummy_agent import DummyAgent
@@ -245,6 +250,156 @@ class TestAgentName(unittest.TestCase):
         auto = DummyAgent().agent_id
         self.assertEqual(len(auto), 32)
         self.assertNotEqual(auto, DummyAgent().agent_id)
+
+
+CLOSED = object()
+
+
+class FakeSocket:
+    """WebSocket whose incoming messages are fed by the test, one at a time."""
+
+    def __init__(self) -> None:
+        self.incoming: asyncio.Queue[Any] = asyncio.Queue()
+        self.sent: list[dict[str, Any]] = []
+
+    async def send(self, msg: str) -> None:
+        self.sent.append(json.loads(msg))
+
+    def push(self, data: dict[str, Any]) -> None:
+        self.incoming.put_nowait(json.dumps(data))
+
+    def close(self) -> None:
+        self.incoming.put_nowait(CLOSED)
+
+    async def __aiter__(self) -> AsyncIterator[str]:
+        while (m := await self.incoming.get()) is not CLOSED:
+            yield m
+
+
+class GatedAgent(BaseAgent):
+    """Records every state it deliberates on; deliberate() blocks until the test releases it."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.seen: list[int] = []
+        self.started = asyncio.Event()
+        self.gate = asyncio.Event()
+
+    async def deliberate(self) -> dict[str, Any] | None:
+        assert self.current_state is not None
+        self.seen.append(self.current_state["n"])
+        self.started.set()
+        await self.gate.wait()
+        return {"action": "move", "direction": "WEST", "n": self.current_state["n"]}
+
+
+def state(n: int, **extra: Any) -> dict[str, Any]:
+    return {"type": "state", "n": n, "game_over": False, **extra}
+
+
+async def settle() -> None:
+    for _ in range(10):
+        await asyncio.sleep(0)
+
+
+class TestBaseAgentLatestState(unittest.IsolatedAsyncioTestCase):
+    async def start(self, agent: BaseAgent) -> tuple[FakeSocket, asyncio.Task[None]]:
+        sock = FakeSocket()
+
+        class Connect:
+            async def __aenter__(self) -> FakeSocket:
+                return sock
+
+            async def __aexit__(self, *args: object) -> None:
+                return None
+
+        patcher = mock.patch("websockets.connect", return_value=Connect())
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        out = contextlib.redirect_stdout(io.StringIO())
+        out.__enter__()
+        self.addCleanup(out.__exit__, None, None, None)
+        task = asyncio.create_task(agent.run())
+        self.addAsyncCleanup(self.stop, task)
+        await settle()
+        return sock, task
+
+    async def stop(self, task: asyncio.Task[None]) -> None:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+    async def test_fast_deliberation_acts_on_every_state(self) -> None:
+        agent = GatedAgent()
+        agent.gate.set()
+        sock, task = await self.start(agent)
+        for n in range(5):
+            sock.push(state(n))
+            await settle()
+        sock.close()
+        await asyncio.wait_for(task, 1)
+        self.assertEqual(agent.seen, [0, 1, 2, 3, 4])
+        self.assertEqual([a["n"] for a in sock.sent[1:]], [0, 1, 2, 3, 4])  # sent[0] is the handshake
+        self.assertEqual(agent.stop_reason, "connection closed")
+
+    async def test_slow_deliberation_skips_obsolete_states(self) -> None:
+        agent = GatedAgent()
+        sock, task = await self.start(agent)
+        sock.push(state(0))
+        await agent.started.wait()
+        for n in range(1, 101):  # the server keeps streaming while deliberate() is busy
+            sock.push(state(n))
+        await settle()
+        agent.gate.set()
+        await settle()
+        sock.close()
+        await asyncio.wait_for(task, 1)
+        self.assertEqual(agent.seen, [0, 100])  # the stale 1..99 are dropped, not queued
+        self.assertEqual([a["n"] for a in sock.sent[1:]], [0, 100])
+
+    async def test_terminal_state_is_not_lost_while_deliberating(self) -> None:
+        for flag, reason in (("game_won", "game won"), ("game_over", "game over")):
+            with self.subTest(flag):
+                agent = GatedAgent()
+                sock, task = await self.start(agent)
+                sock.push(state(0))
+                await agent.started.wait()
+                sock.push(state(1))
+                sock.push(state(2, **{flag: True}))
+                await settle()
+                agent.gate.set()
+                await asyncio.wait_for(task, 1)
+                self.assertEqual(agent.seen, [0])  # terminal state ends the agent, no further deliberation
+                self.assertEqual(agent.stop_reason, reason)
+                assert agent.current_state is not None
+                self.assertEqual(agent.current_state["n"], 2)
+
+    async def test_setup_is_handled_while_deliberating(self) -> None:
+        agent = GatedAgent()
+        sock, task = await self.start(agent)
+        sock.push(state(0))
+        await agent.started.wait()
+        sock.push({"type": "setup", "player_id": 7})
+        await settle()
+        self.assertEqual(agent.player_id, 7)
+        agent.gate.set()
+        sock.close()
+        await asyncio.wait_for(task, 1)
+
+    async def test_dummy_agent_still_plays_through_run(self) -> None:
+        agent = DummyAgent()
+        sock, task = await self.start(agent)
+        moves = [{"action": "move", "direction": "WEST"}, {"action": "move", "direction": "EAST"}]
+        sock.push({"type": "setup", "player_id": 1})
+        for _ in range(3):
+            sock.push({"type": "state", "game_over": False, "valid_actions": moves})
+            await settle()
+        sock.push({"type": "state", "game_over": True, "timed_out": True, "valid_actions": moves})
+        await asyncio.wait_for(task, 1)
+        self.assertEqual(agent.player_id, 1)
+        self.assertEqual(agent.stop_reason, "time limit reached")
+        for action in sock.sent[1:]:
+            self.assertIn(action, moves)
 
 
 if __name__ == "__main__":

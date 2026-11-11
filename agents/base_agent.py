@@ -1,5 +1,6 @@
 """Base agent client for communicating with AI Game Framework servers."""
 
+import asyncio
 import json
 import logging
 import uuid
@@ -45,17 +46,40 @@ class BaseAgent:
                 await websocket.send(json.dumps({"client": "agent", "name": self.name, "id": self.agent_id}))
                 logging.info("Connected to %s as %s (id %s)", self.server_uri, self.name, self.agent_id)
 
-                async for message in websocket:
-                    data = json.loads(message)
+                # Read the socket in its own task and keep only the newest state, so a slow deliberate()
+                # acts on the current game instead of working through a backlog of obsolete states.
+                latest: dict[str, Any] | None = None
+                wakeup = asyncio.Event()
 
-                    msg_type = data.get("type")
-                    if msg_type == "setup":
-                        self.player_id = data.get("player_id")
-                        self.setup_data = data
-                        logging.info("Assigned player ID: %s", self.player_id)
-                        continue
+                async def receive() -> None:
+                    nonlocal latest
+                    try:
+                        async for message in websocket:
+                            data = json.loads(message)
+                            msg_type = data.get("type")
+                            if msg_type == "setup":
+                                self.player_id = data.get("player_id")
+                                self.setup_data = data
+                                logging.info("Assigned player ID: %s", self.player_id)
+                            elif msg_type in ("state", "update"):
+                                latest = data
+                                wakeup.set()
+                                if data.get("game_won") or data.get("game_over"):
+                                    break  # keep the terminal state as the last one
+                    finally:
+                        wakeup.set()
 
-                    if msg_type in ("state", "update"):
+                receiver = asyncio.create_task(receive())
+                try:
+                    while True:
+                        if latest is None:
+                            if receiver.done():
+                                receiver.result()  # connection closed (or failed): re-raise any receive error
+                                break
+                            wakeup.clear()
+                            await wakeup.wait()
+                            continue
+                        data, latest = latest, None
                         self.current_state = data
                         if data.get("game_won"):
                             logging.info("Game won! Victory achieved. Stopping agent.")
@@ -69,6 +93,8 @@ class BaseAgent:
                         action = await self.deliberate()
                         if action is not None:
                             await websocket.send(json.dumps(action))
+                finally:
+                    receiver.cancel()
 
         except Exception as e:
             logging.error("Connection error: %s", e)
