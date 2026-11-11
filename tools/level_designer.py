@@ -114,6 +114,17 @@ def map_to_ascii(map_data: dict[str, Any]) -> str:
     return "\n".join("".join(row) for row in char_grid)
 
 
+def fit_axis(values: list[float], size: float, margin: float, gap: float) -> tuple[float, float]:
+    """Return a (margin, gap) that puts every coordinate on the grid: the defaults if they fit, else the map's own."""
+    values = sorted(set(values))
+    steps = [b - a for a, b in zip(values, values[1:], strict=False)]
+    if values and any((v - margin) % (size + gap) for v in values):
+        margin = values[0]
+        if steps and min(steps) >= size:
+            gap = min(steps) - size
+    return margin, gap
+
+
 def convert_map_to_grid(map_data: dict[str, Any]) -> dict[str, Any]:
     """Convert an existing map (with legacy canvas coordinates) to simplified grid format."""
     grid = map_data.get("grid", {})
@@ -124,6 +135,10 @@ def convert_map_to_grid(map_data: dict[str, Any]) -> dict[str, Any]:
     gap_y = float(grid.get("gap_y", GRID_GAP_Y))
     b_w = float(map_data.get("brick_width", BRICK_WIDTH))
     b_h = float(map_data.get("brick_height", BRICK_HEIGHT))
+    if "grid" not in map_data:
+        coords = [b for b in map_data.get("bricks", []) if "x" in b and "y" in b]
+        margin_x, gap_x = fit_axis([float(b["x"]) for b in coords], b_w, margin_x, gap_x)
+        margin_y, gap_y = fit_axis([float(b["y"]) for b in coords], b_h, margin_y, gap_y)
 
     simplified_bricks: list[dict[str, Any]] = []
     max_row = 0
@@ -134,6 +149,8 @@ def convert_map_to_grid(map_data: dict[str, Any]) -> dict[str, Any]:
             x, y = float(b.get("x", 0.0)), float(b.get("y", 0.0))
             c = int(round((x - margin_x) / (b_w + gap_x)))
             r = int(round((y - margin_y) / (b_h + gap_y)))
+            if (margin_x + c * (b_w + gap_x), margin_y + r * (b_h + gap_y)) != (x, y):
+                raise ValueError(f"Brick at ({x}, {y}) does not fit a regular grid")
         max_row = max(max_row, r)
         b_type = str(b.get("type", "red"))
         simplified_bricks.append({"row": r, "col": c, "type": b_type})
@@ -234,15 +251,12 @@ def run_gui(output_path: str = "maps/custom_level.json", initial_map: str | None
     level_name = "Custom Level"
 
     if initial_map and os.path.exists(initial_map):
-        data = load_map_file(initial_map)
+        data = convert_map_to_grid(load_map_file(initial_map))
         level_name = str(data.get("name", "Custom Level"))
-        for b in data.get("bricks", []):
-            if "row" in b and "col" in b:
-                r, c = int(b["row"]), int(b["col"])
-            else:
-                x, y = float(b["x"]), float(b["y"])
-                c = int(round((x - margin_x) / (b_w + gap_x)))
-                r = int(round((y - margin_y) / (b_h + gap_y)))
+        grid = data["grid"]
+        margin_x, margin_y, gap_x, gap_y = grid["margin_x"], grid["margin_y"], grid["gap_x"], grid["gap_y"]
+        for b in data["bricks"]:
+            r, c = int(b["row"]), int(b["col"])
             if 0 <= r < rows and 0 <= c < cols:
                 grid_cells[r][c] = b.get("type", "red")
 
