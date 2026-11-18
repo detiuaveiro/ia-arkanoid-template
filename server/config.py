@@ -19,6 +19,8 @@ from consts import (
     GAME_LEVEL_TIME_LIMIT,
     GAME_LIVES,
     GAME_MAPS_DIR,
+    GAME_STALL_NUDGE_DEG,
+    GAME_STALL_TIME,
     GRID_GAP_X,
     GRID_GAP_Y,
     GRID_MARGIN_X,
@@ -114,6 +116,10 @@ class GameRulesConfig:
     )
     # seconds of game time per level, 0 disables; game over when exceeded
     level_time_limit: float = GAME_LEVEL_TIME_LIMIT
+    # seconds without touching the paddle or a breakable brick before bounces are nudged, 0 disables
+    stall_time: float = GAME_STALL_TIME
+    # largest random turn (degrees) given to such a bounce
+    stall_nudge_deg: float = GAME_STALL_NUDGE_DEG
 
 
 @dataclass
@@ -195,6 +201,8 @@ def load_config(config_path: str = "config.json") -> AppConfig:
             g_data.get("level_sequence", ["level1.json", "level2.json", "level3.json"])
         ),
         level_time_limit=float(g_data.get("level_time_limit", GAME_LEVEL_TIME_LIMIT)),
+        stall_time=float(g_data.get("stall_time", GAME_STALL_TIME)),
+        stall_nudge_deg=float(g_data.get("stall_nudge_deg", GAME_STALL_NUDGE_DEG)),
     )
 
     return AppConfig(screen=screen, paddle=paddle, ball=ball, bricks=bricks, game=game)

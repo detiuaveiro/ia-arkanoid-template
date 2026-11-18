@@ -41,6 +41,8 @@
     "maps_dir": "maps",
     "highscores_file": "highscores.csv",
     "level_time_limit": 400.0,
+    "stall_time": 30.0,
+    "stall_nudge_deg": 2.0,
     "level_sequence": [
       "level1.json",
       "level2.json",

@@ -54,3 +54,7 @@ GAME_MAPS_DIR: str = "maps"
 GAME_HIGHSCORES_FILE: str = "highscores.csv"
 GAME_LEVEL_TIME_LIMIT: float = 400.0
 GAME_LEVEL_SEQUENCE: list[str] = ["level1.json", "level2.json", "level3.json"]
+# Anti-loop: after this many seconds without touching the paddle or a breakable brick, every bounce off a wall,
+# the ceiling or a metal brick is turned by a small random angle, so the ball cannot orbit forever (0 disables)
+GAME_STALL_TIME: float = 30.0
+GAME_STALL_NUDGE_DEG: float = 2.0
