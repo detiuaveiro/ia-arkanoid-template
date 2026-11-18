@@ -176,6 +176,7 @@ class Arkanoid:
         self.ball_y: float = 0.0
         self.ball_vx: float = 0.0
         self.ball_vy: float = 0.0
+        self.since_progress: float = 0.0  # s since the ball last touched the paddle or a breakable brick
 
         self.lives = self.config.game.lives
         self.score = 0
@@ -461,6 +462,7 @@ class Arkanoid:
         """Position the ball directly above the paddle center and launch with slight random slant."""
         self.ball_x = self.paddle_x + self.paddle_width / 2.0
         self.ball_y = self.paddle_y - self.ball_radius - 2.0
+        self.since_progress = 0.0
 
         # Initial launch angle between -30 and +30 degrees
         angle = float(self.rng.uniform(-math.pi / 6.0, math.pi / 6.0))
@@ -525,8 +527,26 @@ class Arkanoid:
         relative_x = float(self.ball_x - self.paddle_x)
         relative_x = float(max(0.0, min(float(self.paddle_width), relative_x)))
         bounce_angle = self._calculate_paddle_bounce_angle(relative_x)
+        self.since_progress = 0.0
         self.ball_vx = float(self.ball_speed * math.sin(bounce_angle))
         self.ball_vy = float(-self.ball_speed * math.cos(bounce_angle))
+
+    def _nudge_if_stalled(self) -> None:
+        """Turn the ball by a small random angle when it has been bouncing for too long without progress.
+
+        Some brick layouts hold the ball in a (near) periodic orbit among walls, ceiling and metal bricks that never
+        comes back to the paddle, which no agent can break. The turn keeps the speed and the direction of travel of
+        the bounce (a turn that would reverse a component is skipped), so normal play is not affected.
+        """
+        rules = self.config.game
+        if rules.stall_time <= 0.0 or self.since_progress < rules.stall_time or rules.stall_nudge_deg <= 0.0:
+            return
+        turn = math.radians(float(self.rng.uniform(-rules.stall_nudge_deg, rules.stall_nudge_deg)))
+        vx = self.ball_vx * math.cos(turn) - self.ball_vy * math.sin(turn)
+        vy = self.ball_vx * math.sin(turn) + self.ball_vy * math.cos(turn)
+        if vx * self.ball_vx < 0.0 or vy * self.ball_vy < 0.0:
+            return
+        self.ball_vx, self.ball_vy = float(vx), float(vy)
 
     def _find_earliest_brick_collision(
         self, bx: float, by: float, dx: float, dy: float, max_t: float
@@ -641,6 +661,11 @@ class Arkanoid:
                 self.ball_vx = float((self.ball_vx / spd) * self.ball_speed)
                 self.ball_vy = float((self.ball_vy / spd) * self.ball_speed)
 
+        if brick.indestructible:
+            self._nudge_if_stalled()
+        else:
+            self.since_progress = 0.0
+
         r = self.ball_radius
         if abs(hit_nx) > 0.5:
             self.ball_x = float(
@@ -708,6 +733,7 @@ class Arkanoid:
 
         self.elapsed_time += dt
         self.level_elapsed += dt
+        self.since_progress += dt
         if self.score > self.high_score:
             self.high_score = self.score
         if self.avg_norm_score > self.high_score_normalized:
@@ -813,6 +839,7 @@ class Arkanoid:
             elif hit_kind == "ceiling":
                 self.ball_y = self.ceiling_y + r
                 self.ball_vy = abs(self.ball_vy)
+            self._nudge_if_stalled()
             return max(dt * earliest_t, 1e-6)
 
         if hit_kind == "brick" and hit_brick is not None:

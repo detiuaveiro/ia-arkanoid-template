@@ -616,3 +616,73 @@ class TestLevelLoading(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestStallNudge(unittest.TestCase):
+    """A ball bouncing for long without touching the paddle or a breakable brick is nudged out of its loop."""
+
+    # Level 3 with these bricks left holds a ball leaving the paddle at x=99.985, -58.99 deg for ~398 s
+    ALIVE = {
+        (35, 90): -1, (95, 90): 3, (155, 90): 1, (215, 90): 1, (395, 90): 3, (455, 90): 1, (515, 90): -1,
+        (35, 120): -1, (95, 120): 1, (515, 120): -1, (95, 210): -1, (275, 210): -1, (455, 210): -1,
+    }
+
+    def orbit_game(self, stall_time: float) -> Arkanoid:
+        cfg = load_config("config.json")
+        cfg.game.level_sequence = ["level3.json"]
+        cfg.game.level_time_limit = 0.0
+        cfg.game.stall_time = stall_time
+        game = Arkanoid(cfg, high_score_manager=HighScoreManager(None), seed=1)
+        for brick in game.bricks:
+            key = (int(brick.x), int(brick.y))
+            if key not in self.ALIVE:
+                brick.active = False
+                game.brick_array[brick.index, 4] = 0.0
+            elif not brick.indestructible:
+                brick.health = self.ALIVE[key]
+        angle = math.radians(-58.9947)
+        game.ball_x, game.ball_y = 99.985, game.paddle_y - game.ball_radius
+        game.ball_vx = game.ball_speed * math.sin(angle)
+        game.ball_vy = -game.ball_speed * math.cos(angle)
+        game.paddle_x = 300.0
+        return game
+
+    @staticmethod
+    def time_to_come_down(game: Arkanoid, limit: float) -> float:
+        elapsed = 0.0
+        while elapsed < limit:
+            game.update(1.0 / 30.0)
+            elapsed += 1.0 / 30.0
+            if game.ball_vy > 0.0 and game.ball_y > 700.0:
+                break
+        return elapsed
+
+    def test_orbit_without_nudge_lasts_for_minutes(self) -> None:
+        self.assertGreater(self.time_to_come_down(self.orbit_game(0.0), 300.0), 299.0)
+
+    def test_nudge_breaks_the_orbit(self) -> None:
+        self.assertLess(self.time_to_come_down(self.orbit_game(30.0), 300.0), 120.0)
+
+    def test_nudge_keeps_speed_and_direction(self) -> None:
+        game = self.orbit_game(30.0)
+        game.since_progress = 31.0
+        game.ball_vx, game.ball_vy = 200.0, -math.sqrt(game.ball_speed**2 - 200.0**2)
+        before = (game.ball_vx, game.ball_vy)
+        game._nudge_if_stalled()
+        self.assertAlmostEqual(math.hypot(game.ball_vx, game.ball_vy), game.ball_speed, places=6)
+        self.assertGreater(game.ball_vx * before[0], 0.0)
+        self.assertGreater(game.ball_vy * before[1], 0.0)
+        self.assertNotEqual((game.ball_vx, game.ball_vy), before)
+
+    def test_no_nudge_before_the_stall_time(self) -> None:
+        game = self.orbit_game(30.0)
+        game.since_progress = 29.0
+        before = (game.ball_vx, game.ball_vy)
+        game._nudge_if_stalled()
+        self.assertEqual((game.ball_vx, game.ball_vy), before)
+
+    def test_paddle_bounce_resets_the_clock(self) -> None:
+        game = self.orbit_game(30.0)
+        game.since_progress = 50.0
+        game._handle_paddle_bounce(game.paddle_x + game.paddle_width / 2.0)
+        self.assertEqual(game.since_progress, 0.0)
